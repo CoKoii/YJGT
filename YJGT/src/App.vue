@@ -4,10 +4,6 @@ import * as echarts from 'echarts'
 import {
   BarChartOutlined,
   BulbOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  EditOutlined,
-  PlusOutlined,
   RobotOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue'
@@ -21,7 +17,7 @@ import {
   formatMoney,
   formatPercent,
   followRatio,
-  holdingRatio,
+  numberFormatter,
   profitRate,
 } from '@/utils/calculations'
 import { fetchFundNetWorthTrend } from '@/services/fundApi'
@@ -75,15 +71,47 @@ const budgetUsage = computed(() => ({
 const followProgress = computed(() => clampPercent((store.totals.myInvested / shouldInvest.value) * 100))
 
 const holdingRows = computed(() =>
-  store.holdings.map((item) => ({
-    ...item,
-    myInvested: actualInvested(item.myAmount, item.myProfit),
-    bloggerInvested: actualInvested(item.bloggerAmount, item.bloggerProfit),
-    myRate: profitRate(item.myAmount, item.myProfit),
-    bloggerRate: profitRate(item.bloggerAmount, item.bloggerProfit),
-    ratio: holdingRatio(item),
-  })),
+  store.holdings.map((item) => {
+    const myInvested = actualInvested(item.myAmount, item.myProfit)
+    const bloggerInvested = actualInvested(item.bloggerAmount, item.bloggerProfit)
+    const targetInvested = ratio.value.blogger > 0 ? bloggerInvested / ratio.value.blogger : 0
+    const myPositionRate = store.totals.myInvested > 0 ? (myInvested / store.totals.myInvested) * 100 : 0
+    const bloggerPositionRate =
+      store.totals.bloggerInvested > 0 ? (bloggerInvested / store.totals.bloggerInvested) * 100 : 0
+
+    return {
+      ...item,
+      myInvested,
+      bloggerInvested,
+      targetInvested,
+      myRate: profitRate(item.myAmount, item.myProfit),
+      bloggerRate: profitRate(item.bloggerAmount, item.bloggerProfit),
+      myPositionRate,
+      bloggerPositionRate,
+    }
+  }),
 )
+
+function formatNumber(value: number): string {
+  return numberFormatter.format(Number.isFinite(value) ? value : 0)
+}
+
+function formatPlainPercent(value: number): string {
+  const safeValue = Number.isFinite(value) ? value : 0
+  return `${safeValue.toFixed(2)}%`
+}
+
+function getFollowTrendClass(current: number, target: number): string {
+  if (current < target) return 'red'
+  if (current > target) return 'green'
+  return ''
+}
+
+function getFollowTrendIcon(current: number, target: number): string {
+  if (current < target) return '↑'
+  if (current > target) return '↓'
+  return ''
+}
 
 function openBudgetModal() {
   Object.assign(budgetForm, store.budget)
@@ -215,6 +243,14 @@ function exportCsv() {
     ].map(csvEscape),
   )
   download(`yjgt-${Date.now()}.csv`, [header, ...rows].map((row) => row.join(',')).join('\n'), 'text/csv')
+}
+
+function handleExportDropdown({ name }: { name: string | number | null }) {
+  if (name === 'json') {
+    exportJson()
+  } else if (name === 'csv') {
+    exportCsv()
+  }
 }
 
 function renderHoldingChart() {
@@ -429,109 +465,153 @@ onMounted(async () => {
           <a-row :gutter="[12, 12]" align="stretch" class="content-row">
             <a-col :xs="24" :xl="19">
               <section class="portfolio-panel">
-                <a-row class="portfolio-toolbar" align="middle" justify="space-between" :gutter="[12, 8]">
-                  <a-col>
-                    <a-space :size="16" wrap>
-                    <span>持仓列表</span>
-                    <a-typography-text type="secondary">总资产（按我的投入）</a-typography-text>
-                    <a-typography-text strong>{{ formatMoney(store.totals.myAmount) }}</a-typography-text>
-                    <a-typography-text type="secondary">总盈亏</a-typography-text>
-                    <a-typography-text strong :class="store.totals.myProfit >= 0 ? 'red' : 'green'">
-                      {{ formatMoney(store.totals.myProfit) }}（{{ formatPercent(store.totals.myProfitRate) }}）
-                    </a-typography-text>
-                  </a-space>
-                  </a-col>
-                  <a-col>
-                  <a-space wrap>
-                    <a-button type="primary" @click="openCreateModal"><PlusOutlined />新增持仓</a-button>
-                    <a-button @click="isAiModalOpen = true"><RobotOutlined />AI 识别</a-button>
-                    <a-button @click="selectedHolding && openDetailModal(selectedHolding)">
-                      <BarChartOutlined />收益分析
-                    </a-button>
-                    <a-dropdown>
-                      <a-button><DownloadOutlined />导出数据</a-button>
-                      <template #overlay>
-                        <a-menu>
-                          <a-menu-item @click="exportJson">导出 JSON</a-menu-item>
-                          <a-menu-item @click="exportCsv">导出 CSV</a-menu-item>
-                        </a-menu>
-                      </template>
-                    </a-dropdown>
-                  </a-space>
-                  </a-col>
-                </a-row>
+                <vxe-toolbar class="portfolio-toolbar" size="medium">
+                  <template #buttons>
+                    <div class="portfolio-summary">
+                      <span class="portfolio-title">持仓列表</span>
+                      <span class="summary-label">总资产（按我的投入）</span>
+                      <span>{{ formatMoney(store.totals.myAmount) }}</span>
+                      <span class="summary-label">总盈亏</span>
+                      <span :class="store.totals.myProfit >= 0 ? 'red' : 'green'">
+                        {{ formatMoney(store.totals.myProfit) }}（{{ formatPercent(store.totals.myProfitRate) }}）
+                      </span>
+                    </div>
+                  </template>
+                  <template #tools>
+                    <div class="portfolio-actions">
+                      <vxe-button status="primary" icon="vxe-icon-add" content="新增持仓" @click="openCreateModal" />
+                      <vxe-button icon="vxe-icon-picture" content="AI 识别" @click="isAiModalOpen = true" />
+                      <vxe-button
+                        icon="vxe-icon-download"
+                        content="导出数据"
+                        :options="[
+                          { name: 'json', content: '导出 JSON' },
+                          { name: 'csv', content: '导出 CSV' },
+                        ]"
+                        @dropdown-click="handleExportDropdown"
+                      />
+                    </div>
+                  </template>
+                </vxe-toolbar>
                 <div class="vxe-wrap">
                   <vxe-table
                     :data="holdingRows"
                     :column-config="{ resizable: true }"
                     :row-config="{ isHover: true }"
                     auto-resize
-                    border="inner"
+                    border
                     height="100%"
-                    show-overflow
+                    show-overflow="title"
                   >
+                    <vxe-column type="seq" title="序号" width="64" fixed="left" align="center" />
                     <vxe-column title="基金名称" field="fundName" min-width="180" fixed="left">
                       <template #default="{ row }">
                         <button class="link-button" @click.stop="openDetailModal(row)">
-                          <strong>{{ row.fundName }}</strong>
+                          <span class="fund-name-text">{{ row.fundName }}</span>
                           <span>{{ row.fundCode }}</span>
                         </button>
                       </template>
                     </vxe-column>
-                    <vxe-column title="仓位对比（我 : 博主）" min-width="170" align="center">
+                    <vxe-column title="（博主持仓金额） : （我的持仓金额）" min-width="290" align="center">
                       <template #default="{ row }">
-                        <a-tag color="blue">1 : {{ row.ratio.blogger }}</a-tag>
+                        <div class="follow-pair">
+                          <div class="follow-side follow-side-left">
+                            <span class="metric-main">{{ formatNumber(row.bloggerInvested) }}</span>
+                          </div>
+                          <div class="target-cell">
+                            <div class="target-line" :class="getFollowTrendClass(row.myInvested, row.targetInvested)">
+                              <span class="target-value">{{ formatNumber(row.myInvested) }}</span>
+                              <span class="target-arrow">{{ getFollowTrendIcon(row.myInvested, row.targetInvested) }}</span>
+                            </div>
+                            <span class="target-hint">应投入：{{ formatNumber(row.targetInvested) }}</span>
+                          </div>
+                        </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="我的投入" min-width="130" align="right">
-                      <template #default="{ row }">{{ formatMoney(row.myInvested) }}</template>
-                    </vxe-column>
-                    <vxe-column title="博主投入" min-width="130" align="right">
-                      <template #default="{ row }">{{ formatMoney(row.bloggerInvested) }}</template>
-                    </vxe-column>
-                    <vxe-column title="我的盈亏" min-width="130" align="right">
+                    <vxe-column title="（博主占比） : （我的占比）" min-width="240" align="center">
                       <template #default="{ row }">
-                        <span :class="row.myProfit >= 0 ? 'red' : 'green'">{{ formatMoney(row.myProfit) }}</span>
+                        <div class="follow-pair follow-pair-rate">
+                          <div class="follow-side follow-side-left">
+                            <span class="metric-main">{{ formatPlainPercent(row.bloggerPositionRate) }}</span>
+                          </div>
+                          <div class="target-cell">
+                            <div
+                              class="target-line"
+                              :class="getFollowTrendClass(row.myPositionRate, row.bloggerPositionRate)"
+                            >
+                              <span class="target-value">{{ formatPlainPercent(row.myPositionRate) }}</span>
+                              <span class="target-arrow">
+                                {{ getFollowTrendIcon(row.myPositionRate, row.bloggerPositionRate) }}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="我的收益率" min-width="120" align="right">
+                    <vxe-column title="（博主盈亏金额） : （我的盈亏金额）" min-width="260" align="center">
                       <template #default="{ row }">
-                        <span :class="row.myRate >= 0 ? 'red' : 'green'">{{ formatPercent(row.myRate) }}</span>
+                        <div class="follow-pair">
+                          <div class="follow-side follow-side-left">
+                            <span class="metric-main" :class="row.bloggerProfit >= 0 ? 'red' : 'green'">
+                              {{ formatMoney(row.bloggerProfit) }}
+                            </span>
+                          </div>
+                          <div class="follow-side follow-side-right">
+                            <span class="metric-main" :class="row.myProfit >= 0 ? 'red' : 'green'">
+                              {{ formatMoney(row.myProfit) }}
+                            </span>
+                          </div>
+                        </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="博主盈亏" min-width="130" align="right">
+                    <vxe-column title="（博主盈亏比例） : （我的盈亏比例）" min-width="220" align="center">
                       <template #default="{ row }">
-                        <span :class="row.bloggerProfit >= 0 ? 'red' : 'green'">
-                          {{ formatMoney(row.bloggerProfit) }}
-                        </span>
+                        <div class="follow-pair follow-pair-rate">
+                          <div class="follow-side follow-side-left">
+                            <span class="metric-main" :class="row.bloggerRate >= 0 ? 'red' : 'green'">
+                              {{ formatPercent(row.bloggerRate) }}
+                            </span>
+                          </div>
+                          <div class="follow-side follow-side-right">
+                            <span class="metric-main" :class="row.myRate >= 0 ? 'red' : 'green'">
+                              {{ formatPercent(row.myRate) }}
+                            </span>
+                          </div>
+                        </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="博主收益率" min-width="120" align="right">
+                    <vxe-column title="（博主昨日收益） : （我的昨日收益）" min-width="260" align="center">
                       <template #default="{ row }">
-                        <span :class="row.bloggerRate >= 0 ? 'red' : 'green'">{{ formatPercent(row.bloggerRate) }}</span>
-                      </template>
-                    </vxe-column>
-                    <vxe-column title="昨日收益" min-width="120" align="right">
-                      <template #default="{ row }">
-                        <span :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'">
-                          {{ formatMoney(row.myYesterdayProfit) }}
-                        </span>
+                        <div class="follow-pair">
+                          <div class="follow-side follow-side-left">
+                            <span class="metric-main" :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
+                              {{ formatMoney(row.bloggerYesterdayProfit) }}
+                            </span>
+                          </div>
+                          <div class="follow-side follow-side-right">
+                            <span class="metric-main" :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'">
+                              {{ formatMoney(row.myYesterdayProfit) }}
+                            </span>
+                          </div>
+                        </div>
                       </template>
                     </vxe-column>
                     <vxe-column title="操作" fixed="right" width="96" align="center">
                       <template #default="{ row }">
-                        <a-space @click.stop>
-                          <a-button type="link" size="small" @click="openEditModal(row)"><EditOutlined /></a-button>
-                          <a-button type="link" danger size="small" @click="removeHolding(row)"><DeleteOutlined /></a-button>
-                        </a-space>
+                        <div class="row-actions" @click.stop>
+                          <vxe-button mode="text" icon="vxe-icon-edit" title="编辑" @click="openEditModal(row)" />
+                          <vxe-button
+                            mode="text"
+                            status="danger"
+                            icon="vxe-icon-delete"
+                            title="删除"
+                            @click="removeHolding(row)"
+                          />
+                        </div>
                       </template>
                     </vxe-column>
                   </vxe-table>
                 </div>
-                <a-row justify="space-between" align="middle" class="table-footer">
-                  <a-col><a-typography-text type="secondary">共 {{ store.holdings.length }} 只基金</a-typography-text></a-col>
-                  <a-col><a-button type="link" @click="store.resetDemo">恢复示例数据</a-button></a-col>
-                </a-row>
               </section>
             </a-col>
 
@@ -550,9 +630,9 @@ onMounted(async () => {
                         <a-space><a-badge color="#2563ff" />我的收益</a-space>
                       </a-col>
                       <a-col>
-                        <strong :class="store.totals.myYesterdayProfit >= 0 ? 'red' : 'green'">
+                        <span :class="store.totals.myYesterdayProfit >= 0 ? 'red' : 'green'">
                           {{ formatMoney(store.totals.myYesterdayProfit) }}
-                        </strong>
+                        </span>
                       </a-col>
                     </a-row>
                     <a-row justify="space-between" align="middle">
@@ -560,9 +640,9 @@ onMounted(async () => {
                         <a-space><a-badge color="#10a37f" />博主收益</a-space>
                       </a-col>
                       <a-col>
-                        <strong :class="store.totals.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
+                        <span :class="store.totals.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
                           {{ formatMoney(store.totals.bloggerYesterdayProfit) }}
-                        </strong>
+                        </span>
                       </a-col>
                     </a-row>
                   </a-space>
@@ -653,7 +733,7 @@ onMounted(async () => {
             </a-col>
             <a-col :span="12">
               <a-form-item label="基金代码">
-                <a-input v-model:value="holdingForm.fundCode" maxlength="6" placeholder="110011" />
+                <a-input v-model:value="holdingForm.fundCode" :maxlength="6" placeholder="110011" />
               </a-form-item>
             </a-col>
             <a-col :span="8">
