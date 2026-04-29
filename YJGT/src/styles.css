@@ -1,0 +1,325 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: #f7f9fc;
+  color: #172554;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  height: 100vh;
+  padding: 12px 16px 16px;
+  background: #f7f9fc;
+  overflow: hidden;
+}
+
+.ant-layout-header.page-header {
+  height: auto;
+  padding: 0 0 12px !important;
+  line-height: normal;
+  background: transparent;
+}
+
+.ant-layout-content {
+  display: flex;
+  min-height: 0;
+}
+
+.page-stack {
+  width: 100%;
+  min-height: 0;
+}
+
+.main-stack.ant-space-vertical {
+  display: flex;
+  height: 100%;
+}
+
+.main-stack > .ant-space-item {
+  width: 100%;
+}
+
+.main-stack > .ant-space-item:last-child {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.main-stack > .ant-space-item:last-child > .content-row {
+  width: 100%;
+}
+
+.dashboard-card {
+  height: 100%;
+}
+
+.dashboard-card .ant-card-head {
+  min-height: 32px;
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+.dashboard-card .ant-card-body {
+  display: flex;
+  align-items: center;
+  min-height: 74px;
+  padding: 10px 14px;
+}
+
+.dashboard-card .ant-card-body > * {
+  width: 100%;
+}
+
+.overview-panel {
+  border-color: #e3e8f2;
+}
+
+.overview-label {
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.overview-value {
+  min-height: 28px;
+  color: #172554;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 28px;
+}
+
+.overview-input {
+  width: 100%;
+  max-width: 360px;
+  border-color: #d7dfeb;
+  color: #172554;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.overview-input .ant-input-number-input {
+  height: 30px;
+  color: #172554;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.trend-mark {
+  margin-left: 6px;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.brand-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #fff;
+  background: #2563ff;
+  font-size: 22px;
+}
+
+.brand-title {
+  color: #172554;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.ratio-box {
+  justify-content: center;
+  min-height: 54px;
+}
+
+.ratio-number {
+  color: #2563ff;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ratio-number b {
+  padding: 0 8px;
+}
+
+.kpi-label {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.kpi-value {
+  margin-top: 4px;
+  color: #172554;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.kpi-note {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.green {
+  color: #10a37f;
+}
+
+.blue {
+  color: #2563ff;
+}
+
+.red {
+  color: #ff3b30;
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #172554;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-button strong,
+.link-button span {
+  display: block;
+}
+
+.link-button span {
+  margin-top: 3px;
+  color: #3f5f92;
+  font-size: 12px;
+}
+
+.table-footer {
+  padding: 10px 8px 0;
+}
+
+.content-row {
+  flex: 1;
+  min-height: 0;
+}
+
+.content-row > .ant-col {
+  display: flex;
+  min-height: 0;
+}
+
+.content-row > .ant-col > .ant-card,
+.content-row > .ant-col > .ant-space,
+.content-row > .ant-col > .portfolio-panel {
+  width: 100%;
+}
+
+.portfolio-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid #e3e8f2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 26px rgba(32, 56, 96, 0.04);
+}
+
+.portfolio-toolbar {
+  min-height: 52px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.portfolio-toolbar .ant-btn {
+  height: 32px;
+}
+
+.vxe-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.vxe-wrap .vxe-table {
+  width: 100%;
+}
+
+.side-stack {
+  height: 100%;
+}
+
+.chart {
+  width: 100%;
+  height: 288px;
+}
+
+.detail-chart {
+  width: 100%;
+  height: 360px;
+}
+
+.detail-head {
+  margin-bottom: 16px;
+}
+
+.upload-box {
+  margin: 16px 0;
+}
+
+.ant-input-number {
+  width: 100%;
+}
+
+.ant-card {
+  border-color: #e3e8f2;
+  box-shadow: 0 8px 26px rgba(32, 56, 96, 0.04);
+}
+
+.ant-statistic-title {
+  color: #64748b;
+}
+
+.ant-statistic-content {
+  color: #172554;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.vxe-table {
+  color: #172554;
+  font-family: inherit;
+}
+
+.vxe-table .vxe-body--row {
+  height: 44px;
+}
+
+.vxe-table .vxe-body--column,
+.vxe-table .vxe-header--column {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
