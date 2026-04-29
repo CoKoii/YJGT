@@ -92,6 +92,41 @@ const holdingRows = computed(() =>
   }),
 )
 
+const tableNumberStyle = computed(() => {
+  const rows = holdingRows.value
+  const investMoneyTexts = rows.flatMap((row) => [
+    formatNumber(row.bloggerInvested),
+    formatNumber(row.myInvested),
+    formatNumber(row.targetInvested),
+  ])
+  const profitMoneyTexts = rows.flatMap((row) => [
+    formatMoney(row.bloggerProfit),
+    formatMoney(row.myProfit),
+  ])
+  const yesterdayMoneyTexts = rows.flatMap((row) => [
+    formatMoney(row.bloggerYesterdayProfit),
+    formatMoney(row.myYesterdayProfit),
+  ])
+  const percentTexts = rows.flatMap((row) => [
+    formatPlainPercent(row.bloggerPositionRate),
+    formatPlainPercent(row.myPositionRate),
+    formatPercent(row.bloggerRate),
+    formatPercent(row.myRate),
+  ])
+
+  return {
+    '--invest-money-width': toChWidth(investMoneyTexts, 8),
+    '--profit-money-width': toChWidth(profitMoneyTexts, 7),
+    '--yesterday-money-width': toChWidth(yesterdayMoneyTexts, 7),
+    '--percent-main-width': toChWidth(percentTexts, 6),
+  }
+})
+
+function toChWidth(values: string[], min: number): string {
+  const maxLength = Math.max(min, ...values.map((value) => value.length))
+  return `${maxLength + 0.5}ch`
+}
+
 function formatNumber(value: number): string {
   return numberFormatter.format(Number.isFinite(value) ? value : 0)
 }
@@ -501,7 +536,8 @@ onMounted(async () => {
                     auto-resize
                     border
                     height="100%"
-                    show-overflow="title"
+                    show-overflow="tooltip"
+                    :style="tableNumberStyle"
                   >
                     <vxe-column type="seq" title="序号" width="64" fixed="left" align="center" />
                     <vxe-column title="基金名称" field="fundName" min-width="180" fixed="left">
@@ -512,15 +548,15 @@ onMounted(async () => {
                         </button>
                       </template>
                     </vxe-column>
-                    <vxe-column title="（博主持仓金额） : （我的持仓金额）" min-width="290" align="center">
+                    <vxe-column title="（博主持仓金额） : （我的持仓金额）" min-width="340" align="center">
                       <template #default="{ row }">
-                        <div class="follow-pair">
+                        <div class="follow-pair follow-pair-invest">
                           <div class="follow-side follow-side-left">
-                            <span class="metric-main">{{ formatNumber(row.bloggerInvested) }}</span>
+                            <span class="metric-main money-main invest-money-main">{{ formatNumber(row.bloggerInvested) }}</span>
                           </div>
                           <div class="target-cell">
                             <div class="target-line" :class="getFollowTrendClass(row.myInvested, row.targetInvested)">
-                              <span class="target-value">{{ formatNumber(row.myInvested) }}</span>
+                              <span class="target-value money-main invest-money-main">{{ formatNumber(row.myInvested) }}</span>
                               <span class="target-arrow">{{ getFollowTrendIcon(row.myInvested, row.targetInvested) }}</span>
                             </div>
                             <span class="target-hint">应投入：{{ formatNumber(row.targetInvested) }}</span>
@@ -528,18 +564,18 @@ onMounted(async () => {
                         </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="（博主占比） : （我的占比）" min-width="240" align="center">
+                    <vxe-column title="（博主占比） : （我的占比）" min-width="260" align="center">
                       <template #default="{ row }">
                         <div class="follow-pair follow-pair-rate">
                           <div class="follow-side follow-side-left">
-                            <span class="metric-main">{{ formatPlainPercent(row.bloggerPositionRate) }}</span>
+                            <span class="metric-main percent-main">{{ formatPlainPercent(row.bloggerPositionRate) }}</span>
                           </div>
                           <div class="target-cell">
                             <div
                               class="target-line"
                               :class="getFollowTrendClass(row.myPositionRate, row.bloggerPositionRate)"
                             >
-                              <span class="target-value">{{ formatPlainPercent(row.myPositionRate) }}</span>
+                              <span class="target-value percent-main">{{ formatPlainPercent(row.myPositionRate) }}</span>
                               <span class="target-arrow">
                                 {{ getFollowTrendIcon(row.myPositionRate, row.bloggerPositionRate) }}
                               </span>
@@ -548,48 +584,56 @@ onMounted(async () => {
                         </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="（博主盈亏金额） : （我的盈亏金额）" min-width="260" align="center">
+                    <vxe-column title="（博主盈亏金额） : （我的盈亏金额）" min-width="340" align="center">
                       <template #default="{ row }">
-                        <div class="follow-pair">
+                        <div class="follow-pair follow-pair-profit">
                           <div class="follow-side follow-side-left">
-                            <span class="metric-main" :class="row.bloggerProfit >= 0 ? 'red' : 'green'">
+                            <span
+                              class="metric-main money-main profit-money-main"
+                              :class="row.bloggerProfit >= 0 ? 'red' : 'green'"
+                            >
                               {{ formatMoney(row.bloggerProfit) }}
                             </span>
-                          </div>
-                          <div class="follow-side follow-side-right">
-                            <span class="metric-main" :class="row.myProfit >= 0 ? 'red' : 'green'">
-                              {{ formatMoney(row.myProfit) }}
-                            </span>
-                          </div>
-                        </div>
-                      </template>
-                    </vxe-column>
-                    <vxe-column title="（博主盈亏比例） : （我的盈亏比例）" min-width="220" align="center">
-                      <template #default="{ row }">
-                        <div class="follow-pair follow-pair-rate">
-                          <div class="follow-side follow-side-left">
-                            <span class="metric-main" :class="row.bloggerRate >= 0 ? 'red' : 'green'">
+                            <span
+                              class="target-hint money-main profit-money-main rate-under-money"
+                              :class="row.bloggerRate >= 0 ? 'red' : 'green'"
+                            >
                               {{ formatPercent(row.bloggerRate) }}
                             </span>
                           </div>
                           <div class="follow-side follow-side-right">
-                            <span class="metric-main" :class="row.myRate >= 0 ? 'red' : 'green'">
+                            <span
+                              class="metric-main money-main profit-money-main"
+                              :class="row.myProfit >= 0 ? 'red' : 'green'"
+                            >
+                              {{ formatMoney(row.myProfit) }}
+                            </span>
+                            <span
+                              class="target-hint money-main profit-money-main rate-under-money"
+                              :class="row.myRate >= 0 ? 'red' : 'green'"
+                            >
                               {{ formatPercent(row.myRate) }}
                             </span>
                           </div>
                         </div>
                       </template>
                     </vxe-column>
-                    <vxe-column title="（博主昨日收益） : （我的昨日收益）" min-width="260" align="center">
+                    <vxe-column title="（博主昨日收益） : （我的昨日收益）" min-width="320" align="center">
                       <template #default="{ row }">
-                        <div class="follow-pair">
+                        <div class="follow-pair follow-pair-yesterday">
                           <div class="follow-side follow-side-left">
-                            <span class="metric-main" :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
+                            <span
+                              class="metric-main money-main yesterday-money-main"
+                              :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'"
+                            >
                               {{ formatMoney(row.bloggerYesterdayProfit) }}
                             </span>
                           </div>
                           <div class="follow-side follow-side-right">
-                            <span class="metric-main" :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'">
+                            <span
+                              class="metric-main money-main yesterday-money-main"
+                              :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'"
+                            >
                               {{ formatMoney(row.myYesterdayProfit) }}
                             </span>
                           </div>

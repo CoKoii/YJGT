@@ -346,17 +346,60 @@ button {
   font-feature-settings: "tnum";
 }
 
+.percent-main {
+  min-width: var(--percent-main-width, 7ch);
+  text-align: right;
+}
+
+.money-main {
+  text-align: right;
+}
+
+.invest-money-main {
+  min-width: var(--invest-money-width, 11ch);
+}
+
+.profit-money-main {
+  min-width: var(--profit-money-width, 9ch);
+}
+
+.yesterday-money-main {
+  min-width: var(--yesterday-money-width, 9ch);
+}
+
+.rate-under-money {
+  display: inline-block;
+}
+
 .follow-pair {
   display: grid;
-  grid-template-columns: minmax(92px, 1fr) minmax(130px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: 20px;
+  justify-content: center;
+  gap: 16px;
   width: 100%;
-  padding: 0 12px;
+  padding: 0 14px;
+}
+
+.follow-pair-invest {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .follow-pair-rate {
-  grid-template-columns: minmax(64px, 1fr) minmax(86px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.follow-pair-profit {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.follow-pair-yesterday {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.follow-pair-profit .follow-side-left {
+  align-items: flex-end;
+  text-align: right;
 }
 
 .follow-side {
@@ -368,7 +411,6 @@ button {
 
 .follow-side-left {
   align-items: flex-start;
-  padding-right: 8px;
   text-align: left;
 }
 
@@ -384,7 +426,6 @@ button {
   justify-content: center;
   gap: 3px;
   line-height: 18px;
-  padding-left: 8px;
 }
 
 .target-line {
@@ -426,6 +467,14 @@ button {
 
 .vxe-wrap .vxe-table {
   width: 100%;
+}
+
+.vxe-table .vxe-cell {
+  max-width: none;
+}
+
+.vxe-table .vxe-table--fixed-right-wrapper {
+  box-shadow: -10px 0 18px rgba(32, 40, 51, 0.08);
 }
 
 .side-stack {
@@ -479,7 +528,7 @@ button {
 }
 
 .vxe-table .vxe-body--row {
-  height: 48px;
+  height: 52px;
 }
 
 .vxe-table .vxe-body--column,
