@@ -419,6 +419,19 @@ button {
   text-align: right;
 }
 
+.profit-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.profit-value.red {
+  color: #ff2d2d;
+}
+
+.profit-value.green {
+  color: rgb(82, 196, 26);
+}
+
 .target-cell {
   display: inline-flex;
   flex-direction: column;
@@ -495,8 +508,143 @@ button {
   margin-bottom: 16px;
 }
 
+.ai-recognition-modal .ant-modal-body {
+  padding-top: 12px;
+}
+
+.ai-recognition-layout {
+  align-items: stretch;
+}
+
+.ai-control-card,
+.ai-result-card {
+  height: 100%;
+  padding: 16px;
+  border: 1px solid #e3e8f2;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.ai-control-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-card-title {
+  color: #172554;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.ai-card-subtitle {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ai-side-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.ai-side-tabs .ant-radio-button-wrapper {
+  text-align: center;
+}
+
+.ai-recognize-button {
+  height: 36px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(37, 99, 255, 0.18);
+}
+
+.ai-result-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+}
+
+.ai-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ai-result-count {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #2563ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.recognized-table {
+  flex: 1;
+}
+
+.recognized-table .ant-table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.recognized-table .ant-table-thead > tr > th {
+  color: #172554;
+  font-weight: 700;
+}
+
+.recognized-table .ant-table-cell {
+  white-space: nowrap;
+}
+
 .upload-box {
-  margin: 16px 0;
+  flex: none;
+  margin: 14px 0;
+}
+
+.upload-box .ant-upload.ant-upload-drag {
+  height: 150px;
+  border-color: #d7dfeb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.upload-box .ant-upload.ant-upload-drag:hover {
+  border-color: #2563ff;
+}
+
+.upload-box .ant-upload-btn {
+  padding: 14px 8px;
+}
+
+.upload-box .ant-upload-drag-icon {
+  margin-bottom: 8px;
+  color: #2563ff;
+  font-size: 28px;
+}
+
+.upload-box .ant-upload-text {
+  color: #172554;
+  font-weight: 700;
+}
+
+.upload-box .ant-upload-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .ai-control-card,
+  .ai-result-card {
+    min-height: auto;
+  }
 }
 
 .ant-input-number {

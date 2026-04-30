@@ -589,13 +589,13 @@ onMounted(async () => {
                         <div class="follow-pair follow-pair-profit">
                           <div class="follow-side follow-side-left">
                             <span
-                              class="metric-main money-main profit-money-main"
+                              class="metric-main money-main profit-money-main profit-value"
                               :class="row.bloggerProfit >= 0 ? 'red' : 'green'"
                             >
                               {{ formatMoney(row.bloggerProfit) }}
                             </span>
                             <span
-                              class="target-hint money-main profit-money-main rate-under-money"
+                              class="target-hint money-main profit-money-main rate-under-money profit-value"
                               :class="row.bloggerRate >= 0 ? 'red' : 'green'"
                             >
                               {{ formatPercent(row.bloggerRate) }}
@@ -603,13 +603,13 @@ onMounted(async () => {
                           </div>
                           <div class="follow-side follow-side-right">
                             <span
-                              class="metric-main money-main profit-money-main"
+                              class="metric-main money-main profit-money-main profit-value"
                               :class="row.myProfit >= 0 ? 'red' : 'green'"
                             >
                               {{ formatMoney(row.myProfit) }}
                             </span>
                             <span
-                              class="target-hint money-main profit-money-main rate-under-money"
+                              class="target-hint money-main profit-money-main rate-under-money profit-value"
                               :class="row.myRate >= 0 ? 'red' : 'green'"
                             >
                               {{ formatPercent(row.myRate) }}
@@ -623,7 +623,7 @@ onMounted(async () => {
                         <div class="follow-pair follow-pair-yesterday">
                           <div class="follow-side follow-side-left">
                             <span
-                              class="metric-main money-main yesterday-money-main"
+                              class="metric-main money-main yesterday-money-main profit-value"
                               :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'"
                             >
                               {{ formatMoney(row.bloggerYesterdayProfit) }}
@@ -631,7 +631,7 @@ onMounted(async () => {
                           </div>
                           <div class="follow-side follow-side-right">
                             <span
-                              class="metric-main money-main yesterday-money-main"
+                              class="metric-main money-main yesterday-money-main profit-value"
                               :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'"
                             >
                               {{ formatMoney(row.myYesterdayProfit) }}
@@ -814,34 +814,62 @@ onMounted(async () => {
         </a-form>
       </a-modal>
 
-      <a-modal v-model:open="isAiModalOpen" title="AI 识别持仓截图" width="780px" @ok="applyRecognized">
-        <a-row :gutter="20">
-          <a-col :span="8">
-            <a-radio-group v-model:value="aiSide" button-style="solid">
-              <a-radio-button value="mine">我的截图</a-radio-button>
-              <a-radio-button value="blogger">博主截图</a-radio-button>
-            </a-radio-group>
-            <a-upload-dragger accept="image/*" :before-upload="beforeUpload" :max-count="1" class="upload-box">
-              <p class="ant-upload-drag-icon"><RobotOutlined /></p>
-              <p class="ant-upload-text">上传持仓截图</p>
-            </a-upload-dragger>
-            <a-button type="primary" :loading="isRecognizing" block @click="runRecognition">
-              <RobotOutlined />开始识别
-            </a-button>
+      <a-modal
+        v-model:open="isAiModalOpen"
+        title="AI 识别持仓截图"
+        width="840px"
+        wrap-class-name="ai-recognition-modal"
+        @ok="applyRecognized"
+      >
+        <a-row :gutter="[20, 20]" class="ai-recognition-layout">
+          <a-col :xs="24" :md="9">
+            <div class="ai-control-card">
+              <div class="ai-card-title">选择截图类型</div>
+              <a-radio-group v-model:value="aiSide" button-style="solid" class="ai-side-tabs">
+                <a-radio-button value="mine">我的截图</a-radio-button>
+                <a-radio-button value="blogger">博主截图</a-radio-button>
+              </a-radio-group>
+              <a-upload-dragger accept="image/*" :before-upload="beforeUpload" :max-count="1" class="upload-box">
+                <p class="ant-upload-drag-icon"><RobotOutlined /></p>
+                <p class="ant-upload-text">上传持仓截图</p>
+                <p class="ant-upload-hint">支持基金名称、代码、金额、收益识别</p>
+              </a-upload-dragger>
+              <a-button type="primary" :loading="isRecognizing" block class="ai-recognize-button" @click="runRecognition">
+                <RobotOutlined />开始识别
+              </a-button>
+            </div>
           </a-col>
-          <a-col :span="16">
-            <a-table :data-source="recognizedRows" :pagination="false" size="small" row-key="fundCode">
-              <a-table-column title="基金" data-index="fundName" />
-              <a-table-column title="代码" data-index="fundCode" :width="88" />
-              <a-table-column title="金额" :width="110">
-                <template #default="{ record }">{{ formatMoney(record.amount) }}</template>
-              </a-table-column>
-              <a-table-column title="收益" :width="110">
-                <template #default="{ record }">
-                  <span :class="record.profit >= 0 ? 'red' : 'green'">{{ formatMoney(record.profit) }}</span>
-                </template>
-              </a-table-column>
-            </a-table>
+          <a-col :xs="24" :md="15">
+            <div class="ai-result-card">
+              <div class="ai-result-head">
+                <div>
+                  <div class="ai-card-title">识别结果</div>
+                  <div class="ai-card-subtitle">确认无误后点击 OK 写入持仓</div>
+                </div>
+                <span class="ai-result-count">{{ recognizedRows.length }} 条</span>
+              </div>
+              <a-table
+                :data-source="recognizedRows"
+                :pagination="false"
+                :scroll="{ y: 170 }"
+                size="small"
+                row-key="fundCode"
+                class="recognized-table"
+              >
+                <a-table-column title="基金" data-index="fundName" />
+                <a-table-column title="代码" data-index="fundCode" :width="88" />
+                <a-table-column title="金额" :width="112" align="right">
+                  <template #default="{ record }">{{ formatMoney(record.amount) }}</template>
+                </a-table-column>
+                <a-table-column title="收益" :width="112" align="right">
+                  <template #default="{ record }">
+                    <span class="profit-value" :class="record.profit >= 0 ? 'red' : 'green'">
+                      {{ formatMoney(record.profit) }}
+                    </span>
+                  </template>
+                </a-table-column>
+              </a-table>
+            </div>
           </a-col>
         </a-row>
       </a-modal>
