@@ -1,57 +1,70 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import type { AiConfig, BudgetConfig, Holding, InvestorSide, ProfitSnapshot } from '@/types'
-import { actualInvested, holdingSnapshot, profitRate } from '@/utils/calculations'
+import type { AiConfig, BudgetConfig, Holding, HoldingOperation, InvestorSide, ProfitSnapshot } from '@/types'
+import { actualInvested, profitRate } from '@/utils/calculations'
 import { loadPortfolio, savePortfolio } from '@/services/storage'
+
+const DEFAULT_BUDGET: BudgetConfig = { myBudget: 0, bloggerBudget: 0 }
+const DEFAULT_AI_CONFIG: AiConfig = {
+  baseURL: '',
+  apiKey: '',
+  model: '',
+}
+
+type RecognizedHoldingInput = { fundName: string; fundCode: string; amount: number; profit: number }
 
 export const usePortfolioStore = defineStore('portfolio', () => {
   const persisted = loadPortfolio()
-  const budget = ref<BudgetConfig>(persisted?.budget ?? { myBudget: 100000, bloggerBudget: 1000000 })
-  const aiConfig = ref<AiConfig>(
-    persisted?.aiConfig ?? {
-      baseURL: 'https://api.openai.com/v1',
-      apiKey: '',
-      model: 'gpt-4.1-mini',
-    },
-  )
+  const budget = ref<BudgetConfig>(persisted?.budget ?? { ...DEFAULT_BUDGET })
+  const aiConfig = ref<AiConfig>(persisted?.aiConfig ?? { ...DEFAULT_AI_CONFIG })
   const holdings = ref<Holding[]>(persisted?.holdings ?? [])
-  const history = ref<ProfitSnapshot[]>(persisted?.history ?? [])
+  const operations = ref<HoldingOperation[]>(persisted?.operations ?? [])
+  const history = ref<ProfitSnapshot[]>(compactHistory(persisted?.history ?? []))
   const updatedAt = ref(persisted?.updatedAt ?? '')
 
   const totals = computed(() => {
-    const myAmount = holdings.value.reduce((sum, item) => sum + item.myAmount, 0)
-    const bloggerAmount = holdings.value.reduce((sum, item) => sum + item.bloggerAmount, 0)
-    const myProfit = holdings.value.reduce((sum, item) => sum + item.myProfit, 0)
-    const bloggerProfit = holdings.value.reduce((sum, item) => sum + item.bloggerProfit, 0)
-    const myInvested = holdings.value.reduce(
-      (sum, item) => sum + actualInvested(item.myAmount, item.myProfit),
-      0,
-    )
-    const bloggerInvested = holdings.value.reduce(
-      (sum, item) => sum + actualInvested(item.bloggerAmount, item.bloggerProfit),
-      0,
-    )
+    const total = {
+      myAmount: 0,
+      bloggerAmount: 0,
+      myProfit: 0,
+      bloggerProfit: 0,
+      myInvested: 0,
+      bloggerInvested: 0,
+      myYesterdayProfit: 0,
+      bloggerYesterdayProfit: 0,
+    }
+
+    for (const item of holdings.value) {
+      total.myAmount += item.myAmount
+      total.bloggerAmount += item.bloggerAmount
+      total.myProfit += item.myProfit
+      total.bloggerProfit += item.bloggerProfit
+      total.myInvested += actualInvested(item.myAmount, item.myProfit)
+      total.bloggerInvested += actualInvested(item.bloggerAmount, item.bloggerProfit)
+      total.myYesterdayProfit += item.myYesterdayProfit
+      total.bloggerYesterdayProfit += item.bloggerYesterdayProfit
+    }
 
     return {
-      myAmount,
-      bloggerAmount,
-      myProfit,
-      bloggerProfit,
-      myInvested,
-      bloggerInvested,
-      myProfitRate: profitRate(myAmount, myProfit),
-      bloggerProfitRate: profitRate(bloggerAmount, bloggerProfit),
-      myYesterdayProfit: holdings.value.reduce((sum, item) => sum + item.myYesterdayProfit, 0),
-      bloggerYesterdayProfit: holdings.value.reduce(
-        (sum, item) => sum + item.bloggerYesterdayProfit,
-        0,
-      ),
+      ...total,
+      myProfitRate: profitRate(total.myAmount, total.myProfit),
+      bloggerProfitRate: profitRate(total.bloggerAmount, total.bloggerProfit),
     }
   })
 
   function touch() {
     updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
-    history.value = [...history.value.slice(-29), aggregateSnapshot()]
+    recordSnapshot(aggregateSnapshot())
+  }
+
+  function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
+    const latestByDate = new Map<string, ProfitSnapshot>()
+    items.forEach((item) => latestByDate.set(item.date, item))
+    return [...latestByDate.values()].slice(-90)
+  }
+
+  function recordSnapshot(snapshot: ProfitSnapshot) {
+    history.value = [...history.value.filter((item) => item.date !== snapshot.date), snapshot].slice(-90)
   }
 
   function aggregateSnapshot(): ProfitSnapshot {
@@ -80,15 +93,29 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     touch()
   }
 
+  function recordOperation(payload: Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>) {
+    recordOperations([payload])
+  }
+
+  function recordOperations(payloads: Array<Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>>) {
+    const now = new Date().toISOString()
+    const nextOperations: HoldingOperation[] = payloads.map((payload) => ({
+      ...payload,
+      id: crypto.randomUUID(),
+      date: now,
+      source: 'manual',
+      status: 'pending',
+    }))
+    operations.value = [...operations.value, ...nextOperations].slice(-500)
+    touch()
+  }
+
   function removeHolding(id: string) {
     holdings.value = holdings.value.filter((item) => item.id !== id)
     touch()
   }
 
-  function applyRecognizedHolding(
-    side: InvestorSide,
-    data: { fundName: string; fundCode: string; amount: number; profit: number },
-  ) {
+  function buildRecognizedHolding(side: InvestorSide, data: RecognizedHoldingInput): Holding {
     const existing = holdings.value.find((item) => item.fundCode === data.fundCode)
     const base = existing ?? {
       id: crypto.randomUUID(),
@@ -103,36 +130,58 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       updatedAt: new Date().toISOString(),
     }
 
-    const next: Holding =
-      side === 'mine'
-        ? { ...base, fundName: data.fundName, myAmount: data.amount, myProfit: data.profit }
-        : {
-            ...base,
-            fundName: data.fundName,
-            bloggerAmount: data.amount,
-            bloggerProfit: data.profit,
-          }
-
-    upsertHolding(next)
+    return side === 'mine'
+      ? {
+          ...base,
+          fundName: data.fundName,
+          myAmount: data.amount,
+          myProfit: data.profit,
+        }
+      : {
+          ...base,
+          fundName: data.fundName,
+          bloggerAmount: data.amount,
+          bloggerProfit: data.profit,
+        }
   }
 
-  function exportJson(): string {
-    return JSON.stringify({ budget: budget.value, holdings: holdings.value, history: history.value }, null, 2)
+  function applyRecognizedHolding(side: InvestorSide, data: RecognizedHoldingInput) {
+    upsertHolding(buildRecognizedHolding(side, data))
   }
 
-  function resetPortfolio() {
-    holdings.value = []
-    history.value = []
+  function applyRecognizedHoldings(side: InvestorSide, rows: RecognizedHoldingInput[]) {
+    rows.forEach((row) => {
+      const next = {
+        ...buildRecognizedHolding(side, row),
+        updatedAt: new Date().toISOString(),
+      }
+      const existingIndex = holdings.value.findIndex((item) => item.id === next.id)
+
+      if (existingIndex >= 0) {
+        holdings.value.splice(existingIndex, 1, next)
+      } else {
+        holdings.value.unshift(next)
+      }
+    })
     touch()
   }
 
+  function exportJson(): string {
+    return JSON.stringify(
+      { budget: budget.value, holdings: holdings.value, operations: operations.value, history: history.value },
+      null,
+      2,
+    )
+  }
+
   watch(
-    [budget, aiConfig, holdings, history, updatedAt],
+    [budget, aiConfig, holdings, operations, history, updatedAt],
     () => {
       savePortfolio({
         budget: budget.value,
         aiConfig: aiConfig.value,
         holdings: holdings.value,
+        operations: operations.value,
         history: history.value,
         updatedAt: updatedAt.value,
       })
@@ -144,14 +193,16 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     budget,
     aiConfig,
     holdings,
+    operations,
     history,
     updatedAt,
     totals,
-    holdingSnapshot,
     upsertHolding,
     removeHolding,
+    recordOperation,
+    recordOperations,
     applyRecognizedHolding,
+    applyRecognizedHoldings,
     exportJson,
-    resetPortfolio,
   }
 })

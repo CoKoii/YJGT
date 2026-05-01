@@ -11,6 +11,13 @@ export interface AiConfig {
   model: string
 }
 
+export interface AiChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
 export interface Holding {
   id: string
   fundName: string
@@ -24,6 +31,23 @@ export interface Holding {
   updatedAt: string
 }
 
+export interface HoldingOperation {
+  id: string
+  side: InvestorSide
+  type: 'buy' | 'sell' | 'convert'
+  date: string
+  amount: number
+  fundCode?: string
+  fundName?: string
+  fromFundCode?: string
+  fromFundName?: string
+  toFundCode?: string
+  toFundName?: string
+  source: 'manual' | 'ai'
+  status: 'pending' | 'confirmed'
+  share?: number
+}
+
 export interface ProfitSnapshot {
   date: string
   myProfit: number
@@ -35,7 +59,6 @@ export interface ProfitSnapshot {
 export interface FundTrendPoint {
   date: string
   value: number
-  growthRate?: number
 }
 
 export interface RecognizedHolding {

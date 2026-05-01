@@ -1,4 +1,4 @@
-import type { BudgetConfig, Holding, ProfitSnapshot } from '@/types'
+import type { BudgetConfig, Holding } from '@/types'
 
 export const moneyFormatter = new Intl.NumberFormat('zh-CN', {
   style: 'currency',
@@ -45,16 +45,6 @@ export function holdingRatio(holding: Holding): { blogger: number; mine: number 
   }
 
   return { blogger: Math.round((holding.bloggerAmount / holding.myAmount) * 10) / 10, mine: 1 }
-}
-
-export function holdingSnapshot(holding: Holding): ProfitSnapshot {
-  return {
-    date: new Date().toISOString().slice(0, 10),
-    myProfit: holding.myProfit,
-    bloggerProfit: holding.bloggerProfit,
-    myProfitRate: profitRate(holding.myAmount, holding.myProfit),
-    bloggerProfitRate: profitRate(holding.bloggerAmount, holding.bloggerProfit),
-  }
 }
 
 export function clampPercent(value: number): number {
