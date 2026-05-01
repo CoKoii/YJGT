@@ -115,6 +115,12 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     touch()
   }
 
+  function removeOperations(ids: string[]) {
+    const idSet = new Set(ids)
+    operations.value = operations.value.filter((item) => !idSet.has(item.id))
+    touch()
+  }
+
   function buildRecognizedHolding(side: InvestorSide, data: RecognizedHoldingInput): Holding {
     const existing = holdings.value.find((item) => item.fundCode === data.fundCode)
     const base = existing ?? {
@@ -199,6 +205,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     totals,
     upsertHolding,
     removeHolding,
+    removeOperations,
     recordOperation,
     recordOperations,
     applyRecognizedHolding,

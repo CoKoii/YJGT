@@ -87,7 +87,7 @@ function simplifyFundName(name: string): string {
 }
 
 function charSet(value: string): Set<string> {
-  return new Set([...value])
+  return new Set(value)
 }
 
 function charOverlapScore(left: string, right: string): number {

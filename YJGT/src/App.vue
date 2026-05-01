@@ -56,7 +56,7 @@ const isDetailModalOpen = ref(false)
 const isOperationModalOpen = ref(false)
 const isOperationDetailOpen = ref(false)
 const selectedHoldingId = ref<string | null>(null)
-const selectedOperation = ref<HoldingOperation | null>(null)
+const selectedOperations = ref<HoldingOperation[]>([])
 const sideChartRange = ref<'month' | 'quarter'>('month')
 const trendRange = ref<TrendRange>('month')
 const detailChartMode = ref<DetailChartMode>('performance')
@@ -113,12 +113,10 @@ const selectedHolding = computed(() => {
 
 const ratio = computed(() => followRatio(store.budget))
 const shouldInvest = computed(() => store.totals.bloggerInvested / Math.max(ratio.value.blogger, 1))
-const remainingInvest = computed(() => Math.max(shouldInvest.value - store.totals.myInvested, 0))
 const budgetUsage = computed(() => ({
   mine: store.budget.myBudget > 0 ? clampPercent((store.totals.myInvested / store.budget.myBudget) * 100) : 0,
   blogger: store.budget.bloggerBudget > 0 ? clampPercent((store.totals.bloggerInvested / store.budget.bloggerBudget) * 100) : 0,
 }))
-const followProgress = computed(() => clampPercent((store.totals.myInvested / shouldInvest.value) * 100))
 const todayProfit = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
   const previousSnapshot = [...store.history].reverse().find((item) => item.date < today)
@@ -127,6 +125,25 @@ const todayProfit = computed(() => {
     mine: previousSnapshot ? store.totals.myProfit - previousSnapshot.myProfit : 0,
     blogger: previousSnapshot ? store.totals.bloggerProfit - previousSnapshot.bloggerProfit : 0,
   }
+})
+
+const pendingOperationsByFundCode = computed(() => {
+  const operationsByFundCode = new Map<string, HoldingOperation[]>()
+  const addOperation = (fundCode: string | undefined, operation: HoldingOperation) => {
+    if (!fundCode) return
+    const operations = operationsByFundCode.get(fundCode) ?? []
+    operations.push(operation)
+    operationsByFundCode.set(fundCode, operations)
+  }
+
+  store.operations
+    .filter((operation) => operation.status === 'pending')
+    .forEach((operation) => {
+      const fundCodes = new Set([operation.fundCode, operation.fromFundCode, operation.toFundCode])
+      fundCodes.forEach((fundCode) => addOperation(fundCode, operation))
+    })
+
+  return operationsByFundCode
 })
 
 const holdingRows = computed(() =>
@@ -147,9 +164,16 @@ const holdingRows = computed(() =>
       bloggerRate: profitRate(item.bloggerAmount, item.bloggerProfit),
       myPositionRate,
       bloggerPositionRate,
+      pendingOperations: pendingOperationsByFundCode.value.get(item.fundCode) ?? [],
     }
   }),
 )
+
+const selectedOperation = computed(() => selectedOperations.value[0] ?? null)
+const selectedOperationsBySide = computed(() => ({
+  blogger: selectedOperations.value.find((operation) => operation.side === 'blogger'),
+  mine: selectedOperations.value.find((operation) => operation.side === 'mine'),
+}))
 
 const recognizedSummary = computed(() =>
   recognizedRows.value.reduce(
@@ -308,25 +332,34 @@ function getOperationLabel(type: 'buy' | 'sell' | 'convert'): string {
   return '买'
 }
 
-function getOperationStatusText(type: HoldingOperation['type']): string {
-  if (type === 'sell') return '卖出确认中'
-  if (type === 'convert') return '转换确认中'
-  return '买入确认中'
+function getOperationActionText(type: HoldingOperation['type']): string {
+  if (type === 'sell') return '卖出'
+  if (type === 'convert') return '转换'
+  return '买入'
 }
 
-function getHoldingPendingOperations(record: Holding): HoldingOperation[] {
-  return store.operations.filter(
-    (item) =>
-      item.status === 'pending' &&
-      (item.fundCode === record.fundCode ||
-        item.fromFundCode === record.fundCode ||
-        item.toFundCode === record.fundCode),
-  )
+function getInvestorSideText(side: InvestorSide): string {
+  return side === 'mine' ? '我的' : '博主'
 }
 
-function openOperationDetail(operation: HoldingOperation) {
-  selectedOperation.value = operation
+function openOperationDetail(operations: HoldingOperation[]) {
+  selectedOperations.value = operations
   isOperationDetailOpen.value = true
+}
+
+function revokeSelectedOperations() {
+  Modal.confirm({
+    title: '撤回操作',
+    content: '确认撤回这笔操作记录？撤回后将从确认中记录里移除。',
+    okText: '确认',
+    cancelText: '取消',
+    onOk: () => {
+      store.removeOperations(selectedOperations.value.map((operation) => operation.id))
+      selectedOperations.value = []
+      isOperationDetailOpen.value = false
+      message.success('操作已撤回')
+    },
+  })
 }
 
 function getFollowTrendClass(current: number, target: number): string {
@@ -478,7 +511,7 @@ function removeHolding(record: Holding) {
   Modal.confirm({
     title: '删除持仓',
     content: `确认删除 ${record.fundName}？`,
-    okText: '删除',
+    okText: '确认',
     okType: 'danger',
     cancelText: '取消',
     onOk: () => {
@@ -964,7 +997,7 @@ onUnmounted(() => {
       </a-layout-header>
 
       <a-layout-content>
-        <a-space direction="vertical" :size="12" class="page-stack main-stack">
+        <div class="page-stack main-stack">
           <a-card class="overview-panel" :body-style="{ padding: '14px 16px' }">
             <a-row :gutter="[32, 14]">
               <a-col :xs="24" :md="12" :xl="6">
@@ -1087,20 +1120,19 @@ onUnmounted(() => {
                     <vxe-column type="seq" title="序号" width="64" fixed="left" align="center" />
                     <vxe-column title="基金名称" field="fundName" fixed="left">
                       <template #default="{ row }">
-                        <button class="link-button" @click.stop="openDetailModal(row)">
-                          <span class="fund-name-text">{{ row.fundName }}</span>
-                          <span>{{ row.fundCode }}</span>
-                        </button>
-                        <div v-if="getHoldingPendingOperations(row).length > 0" class="operation-tags">
-                          <a-tag
-                            v-for="operation in getHoldingPendingOperations(row)"
-                            :key="operation.id"
-                            color="processing"
-                            class="operation-tag"
-                            @click.stop="openOperationDetail(operation)"
+                        <div class="fund-cell">
+                          <button class="link-button" @click.stop="openDetailModal(row)">
+                            <span class="fund-name-text">{{ row.fundName }}</span>
+                            <span>{{ row.fundCode }}</span>
+                          </button>
+                          <button
+                            v-if="row.pendingOperations.length > 0"
+                            type="button"
+                            class="operation-float-tag"
+                            @click.stop="openOperationDetail(row.pendingOperations)"
                           >
-                            {{ getOperationStatusText(operation.type) }}
-                          </a-tag>
+                            {{ getOperationLabel(row.pendingOperations[0].type) }}
+                          </button>
                         </div>
                       </template>
                     </vxe-column>
@@ -1192,7 +1224,7 @@ onUnmounted(() => {
             </a-col>
 
             <a-col :xs="24" :xl="5">
-              <a-space direction="vertical" :size="12" class="page-stack side-stack">
+              <div class="page-stack side-stack">
                 <a-card title="近一个月收益趋势" size="small">
                   <template #extra>
                     <a-select v-model:value="sideChartRange" size="small" style="width: 78px">
@@ -1234,11 +1266,11 @@ onUnmounted(() => {
                     </a-button>
                   </div>
                 </a-card>
-              </a-space>
+              </div>
             </a-col>
           </a-row>
 
-        </a-space>
+        </div>
       </a-layout-content>
 
       <a-modal
@@ -1280,6 +1312,8 @@ onUnmounted(() => {
         title="设置"
         width="860px"
         wrap-class-name="settings-modal"
+        ok-text="确认"
+        cancel-text="取消"
         @ok="saveBudget"
       >
         <a-form layout="vertical" autocomplete="off" class="settings-form">
@@ -1388,7 +1422,15 @@ onUnmounted(() => {
         </a-form>
       </a-modal>
 
-      <a-modal v-model:open="isHoldingModalOpen" centered title="持仓记录" width="720px" @ok="saveHolding">
+      <a-modal
+        v-model:open="isHoldingModalOpen"
+        centered
+        title="持仓记录"
+        width="720px"
+        ok-text="确认"
+        cancel-text="取消"
+        @ok="saveHolding"
+      >
         <a-form layout="vertical">
           <a-row :gutter="16">
             <a-col :span="12">
@@ -1443,6 +1485,8 @@ onUnmounted(() => {
         centered
         :title="getOperationTitle()"
         width="560px"
+        ok-text="确认"
+        cancel-text="取消"
         @ok="saveOperation"
       >
         <a-form layout="vertical">
@@ -1523,26 +1567,48 @@ onUnmounted(() => {
         </a-form>
       </a-modal>
 
-      <a-modal v-model:open="isOperationDetailOpen" centered title="操作详情" :footer="null" width="520px">
-        <a-descriptions v-if="selectedOperation" bordered size="small" :column="1">
-          <a-descriptions-item label="状态">{{ selectedOperation.status === 'pending' ? '确认中' : '已确认' }}</a-descriptions-item>
-          <a-descriptions-item label="操作">{{ getOperationStatusText(selectedOperation.type).replace('确认中', '') }}</a-descriptions-item>
-          <a-descriptions-item label="对象">{{ selectedOperation.side === 'mine' ? '我的' : '博主' }}</a-descriptions-item>
-          <a-descriptions-item label="金额">{{ formatMoney(selectedOperation.amount) }}</a-descriptions-item>
-          <a-descriptions-item v-if="selectedOperation.share" label="转出份额">
-            {{ formatNumber(selectedOperation.share) }}
-          </a-descriptions-item>
-          <a-descriptions-item v-if="selectedOperation.fundName" label="基金">
-            {{ selectedOperation.fundName }}（{{ selectedOperation.fundCode }}）
-          </a-descriptions-item>
-          <a-descriptions-item v-if="selectedOperation.fromFundName" label="转出基金">
-            {{ selectedOperation.fromFundName }}（{{ selectedOperation.fromFundCode }}）
-          </a-descriptions-item>
-          <a-descriptions-item v-if="selectedOperation.toFundName" label="转入基金">
-            {{ selectedOperation.toFundName }}（{{ selectedOperation.toFundCode }}）
-          </a-descriptions-item>
-          <a-descriptions-item label="记录时间">{{ new Date(selectedOperation.date).toLocaleString('zh-CN', { hour12: false }) }}</a-descriptions-item>
-        </a-descriptions>
+      <a-modal v-model:open="isOperationDetailOpen" centered title="操作详情" :footer="null" width="620px">
+        <a-space v-if="selectedOperation" direction="vertical" :size="12" class="full-width">
+          <a-descriptions bordered size="small" :column="1">
+            <a-descriptions-item label="状态">
+              {{ selectedOperation.status === 'pending' ? '确认中' : '已确认' }}
+            </a-descriptions-item>
+            <a-descriptions-item label="操作">{{ getOperationActionText(selectedOperation.type) }}</a-descriptions-item>
+            <a-descriptions-item v-if="selectedOperation.fundName" label="基金">
+              {{ selectedOperation.fundName }}（{{ selectedOperation.fundCode }}）
+            </a-descriptions-item>
+            <a-descriptions-item v-if="selectedOperation.fromFundName" label="转出基金">
+              {{ selectedOperation.fromFundName }}（{{ selectedOperation.fromFundCode }}）
+            </a-descriptions-item>
+            <a-descriptions-item v-if="selectedOperation.toFundName" label="转入基金">
+              {{ selectedOperation.toFundName }}（{{ selectedOperation.toFundCode }}）
+            </a-descriptions-item>
+            <a-descriptions-item label="记录时间">
+              {{ new Date(selectedOperation.date).toLocaleString('zh-CN', { hour12: false }) }}
+            </a-descriptions-item>
+          </a-descriptions>
+          <div class="operation-side-grid">
+            <div
+              v-for="side in (['blogger', 'mine'] as InvestorSide[])"
+              :key="side"
+              class="operation-side-panel"
+            >
+              <div class="operation-side-title">{{ getInvestorSideText(side) }}</div>
+              <div v-if="selectedOperationsBySide[side]" class="operation-side-fields">
+                <div class="operation-side-field">
+                  <span>金额</span>
+                  <strong>{{ formatMoney(selectedOperationsBySide[side]?.amount ?? 0) }}</strong>
+                </div>
+                <div v-if="selectedOperationsBySide[side]?.share" class="operation-side-field">
+                  <span>转出份额</span>
+                  <strong>{{ formatNumber(selectedOperationsBySide[side]?.share ?? 0) }}</strong>
+                </div>
+              </div>
+              <div v-else class="operation-side-empty">未记录</div>
+            </div>
+          </div>
+          <a-button block danger @click="revokeSelectedOperations">撤回操作</a-button>
+        </a-space>
       </a-modal>
 
       <a-modal
@@ -1551,6 +1617,7 @@ onUnmounted(() => {
         title="AI 识别持仓截图"
         width="1040px"
         wrap-class-name="ai-recognition-modal"
+        ok-text="确认"
         cancel-text="取消"
         @ok="applyRecognized"
       >
