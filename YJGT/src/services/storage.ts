@@ -1,6 +1,6 @@
 import type { AiConfig, BudgetConfig, Holding, ProfitSnapshot } from '@/types'
 
-const STORAGE_KEY = 'yjgt:portfolio:v1'
+const STORAGE_KEY = 'yjgt:portfolio:v2'
 
 export interface PersistedPortfolio {
   budget: BudgetConfig

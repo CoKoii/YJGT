@@ -4,6 +4,9 @@ import * as echarts from 'echarts'
 import {
   BarChartOutlined,
   BulbOutlined,
+  DownloadOutlined,
+  DownOutlined,
+  PlusOutlined,
   RobotOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue'
@@ -121,6 +124,8 @@ const tableNumberStyle = computed(() => {
     '--percent-main-width': toChWidth(percentTexts, 6),
   }
 })
+
+const recognizedTableScroll = computed(() => (recognizedRows.value.length > 8 ? { y: 390 } : undefined))
 
 function toChWidth(values: string[], min: number): string {
   const maxLength = Math.max(min, ...values.map((value) => value.length))
@@ -280,10 +285,10 @@ function exportCsv() {
   download(`yjgt-${Date.now()}.csv`, [header, ...rows].map((row) => row.join(',')).join('\n'), 'text/csv')
 }
 
-function handleExportDropdown({ name }: { name: string | number | null }) {
-  if (name === 'json') {
+function handleExportMenuClick({ key }: { key: string | number }) {
+  if (key === 'json') {
     exportJson()
-  } else if (name === 'csv') {
+  } else if (key === 'csv') {
     exportCsv()
   }
 }
@@ -514,17 +519,27 @@ onMounted(async () => {
                   </template>
                   <template #tools>
                     <div class="portfolio-actions">
-                      <vxe-button status="primary" icon="vxe-icon-add" content="新增持仓" @click="openCreateModal" />
-                      <vxe-button icon="vxe-icon-picture" content="AI 识别" @click="isAiModalOpen = true" />
-                      <vxe-button
-                        icon="vxe-icon-download"
-                        content="导出数据"
-                        :options="[
-                          { name: 'json', content: '导出 JSON' },
-                          { name: 'csv', content: '导出 CSV' },
-                        ]"
-                        @dropdown-click="handleExportDropdown"
-                      />
+                      <a-button type="primary" @click="openCreateModal">
+                        <template #icon><PlusOutlined /></template>
+                        新增持仓
+                      </a-button>
+                      <a-button @click="isAiModalOpen = true">
+                        <template #icon><RobotOutlined /></template>
+                        AI 识别
+                      </a-button>
+                      <a-dropdown>
+                        <a-button>
+                          <template #icon><DownloadOutlined /></template>
+                          导出数据
+                          <DownOutlined />
+                        </a-button>
+                        <template #overlay>
+                          <a-menu @click="handleExportMenuClick">
+                            <a-menu-item key="json">导出 JSON</a-menu-item>
+                            <a-menu-item key="csv">导出 CSV</a-menu-item>
+                          </a-menu>
+                        </template>
+                      </a-dropdown>
                     </div>
                   </template>
                 </vxe-toolbar>
@@ -772,12 +787,12 @@ onMounted(async () => {
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="基金名称">
-                <a-input v-model:value="holdingForm.fundName" placeholder="易方达中小盘混合" />
+                <a-input v-model:value="holdingForm.fundName" placeholder="请输入基金名称" />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item label="基金代码">
-                <a-input v-model:value="holdingForm.fundCode" :maxlength="6" placeholder="110011" />
+                <a-input v-model:value="holdingForm.fundCode" :maxlength="6" placeholder="请输入 6 位基金代码" />
               </a-form-item>
             </a-col>
             <a-col :span="8">
@@ -817,59 +832,70 @@ onMounted(async () => {
       <a-modal
         v-model:open="isAiModalOpen"
         title="AI 识别持仓截图"
-        width="840px"
+        width="1040px"
         wrap-class-name="ai-recognition-modal"
         @ok="applyRecognized"
       >
         <a-row :gutter="[20, 20]" class="ai-recognition-layout">
-          <a-col :xs="24" :md="9">
-            <div class="ai-control-card">
-              <div class="ai-card-title">选择截图类型</div>
-              <a-radio-group v-model:value="aiSide" button-style="solid" class="ai-side-tabs">
-                <a-radio-button value="mine">我的截图</a-radio-button>
-                <a-radio-button value="blogger">博主截图</a-radio-button>
-              </a-radio-group>
-              <a-upload-dragger accept="image/*" :before-upload="beforeUpload" :max-count="1" class="upload-box">
-                <p class="ant-upload-drag-icon"><RobotOutlined /></p>
-                <p class="ant-upload-text">上传持仓截图</p>
-                <p class="ant-upload-hint">支持基金名称、代码、金额、收益识别</p>
-              </a-upload-dragger>
-              <a-button type="primary" :loading="isRecognizing" block class="ai-recognize-button" @click="runRecognition">
-                <RobotOutlined />开始识别
-              </a-button>
-            </div>
+          <a-col :xs="24" :md="8">
+            <a-card size="small" class="ai-control-card">
+              <a-space direction="vertical" :size="16" class="ai-panel-stack">
+                <a-space direction="vertical" :size="10" class="ai-panel-stack">
+                  <div class="ai-card-title">选择截图类型</div>
+                  <a-radio-group v-model:value="aiSide" button-style="solid" class="ai-side-tabs">
+                    <a-radio-button value="mine">我的截图</a-radio-button>
+                    <a-radio-button value="blogger">博主截图</a-radio-button>
+                  </a-radio-group>
+                </a-space>
+                <a-upload-dragger accept="image/*" :before-upload="beforeUpload" :max-count="1" class="upload-box">
+                  <p class="ant-upload-drag-icon"><RobotOutlined /></p>
+                  <p class="ant-upload-text">上传持仓截图</p>
+                  <p class="ant-upload-hint">支持基金名称、代码、金额、收益识别</p>
+                </a-upload-dragger>
+                <a-button type="primary" :loading="isRecognizing" block class="ai-recognize-button" @click="runRecognition">
+                  <RobotOutlined />开始识别
+                </a-button>
+              </a-space>
+            </a-card>
           </a-col>
-          <a-col :xs="24" :md="15">
-            <div class="ai-result-card">
-              <div class="ai-result-head">
-                <div>
-                  <div class="ai-card-title">识别结果</div>
-                  <div class="ai-card-subtitle">确认无误后点击 OK 写入持仓</div>
-                </div>
-                <span class="ai-result-count">{{ recognizedRows.length }} 条</span>
+          <a-col :xs="24" :md="16">
+            <a-card size="small" class="ai-result-card">
+              <a-space direction="vertical" :size="12" class="ai-panel-stack">
+                <a-row justify="space-between" align="top" :wrap="false">
+                  <a-col>
+                    <div class="ai-card-title">识别结果</div>
+                    <div class="ai-card-subtitle">确认无误后点击 OK 写入持仓</div>
+                  </a-col>
+                  <a-col>
+                    <span class="ai-result-count">{{ recognizedRows.length }} 条</span>
+                  </a-col>
+                </a-row>
+              </a-space>
+              <a-divider class="ai-result-divider" />
+              <div class="recognized-table-wrap">
+                <a-table
+                  :data-source="recognizedRows"
+                  :pagination="false"
+                  :scroll="recognizedTableScroll"
+                  size="small"
+                  row-key="fundCode"
+                  class="recognized-table"
+                >
+                  <a-table-column title="基金" data-index="fundName" />
+                  <a-table-column title="代码" data-index="fundCode" :width="88" />
+                  <a-table-column title="金额" :width="112" align="right">
+                    <template #default="{ record }">{{ formatMoney(record.amount) }}</template>
+                  </a-table-column>
+                  <a-table-column title="收益" :width="112" align="right">
+                    <template #default="{ record }">
+                      <span class="profit-value" :class="record.profit >= 0 ? 'red' : 'green'">
+                        {{ formatMoney(record.profit) }}
+                      </span>
+                    </template>
+                  </a-table-column>
+                </a-table>
               </div>
-              <a-table
-                :data-source="recognizedRows"
-                :pagination="false"
-                :scroll="{ y: 170 }"
-                size="small"
-                row-key="fundCode"
-                class="recognized-table"
-              >
-                <a-table-column title="基金" data-index="fundName" />
-                <a-table-column title="代码" data-index="fundCode" :width="88" />
-                <a-table-column title="金额" :width="112" align="right">
-                  <template #default="{ record }">{{ formatMoney(record.amount) }}</template>
-                </a-table-column>
-                <a-table-column title="收益" :width="112" align="right">
-                  <template #default="{ record }">
-                    <span class="profit-value" :class="record.profit >= 0 ? 'red' : 'green'">
-                      {{ formatMoney(record.profit) }}
-                    </span>
-                  </template>
-                </a-table-column>
-              </a-table>
-            </div>
+            </a-card>
           </a-col>
         </a-row>
       </a-modal>

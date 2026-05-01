@@ -15,8 +15,8 @@ body {
   background: #f7f9fc;
   color: #172554;
   font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
 button {
@@ -343,7 +343,7 @@ button {
   color: #202833;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
 }
 
 .percent-main {
@@ -421,7 +421,7 @@ button {
 
 .profit-value {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
 }
 
 .profit-value.red {
@@ -453,7 +453,7 @@ button {
   font-size: 16px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
 }
 
 .target-arrow {
@@ -466,14 +466,13 @@ button {
   font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
 }
 
 .vxe-wrap {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #e3e8f2;
   border-top: 0;
   background: #fff;
 }
@@ -509,25 +508,46 @@ button {
 }
 
 .ai-recognition-modal .ant-modal-body {
+  height: min(68vh, 620px);
+  min-height: 430px;
+  overflow: hidden;
   padding-top: 12px;
 }
 
 .ai-recognition-layout {
+  height: 100%;
   align-items: stretch;
 }
 
-.ai-control-card,
-.ai-result-card {
-  height: 100%;
-  padding: 16px;
-  border: 1px solid #e3e8f2;
-  border-radius: 14px;
-  background: #fff;
+.ai-recognition-layout > .ant-col:last-child {
+  display: flex;
+  min-height: 0;
 }
 
 .ai-control-card {
+  width: 100%;
+  border: 1px solid #e3e8f2;
+}
+
+.ai-result-card {
   display: flex;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid #e3e8f2;
+}
+
+.ai-result-card .ant-card-body {
+  display: flex;
+  height: 100%;
+  width: 100%;
   flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.ai-panel-stack,
+.ai-panel-stack.ant-space-vertical {
+  width: 100%;
 }
 
 .ai-card-title {
@@ -545,34 +565,19 @@ button {
 }
 
 .ai-side-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   width: 100%;
-  margin-top: 12px;
 }
 
 .ai-side-tabs .ant-radio-button-wrapper {
+  flex: 1;
   text-align: center;
 }
 
 .ai-recognize-button {
   height: 36px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(37, 99, 255, 0.18);
-}
-
-.ai-result-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 260px;
-}
-
-.ai-result-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  box-shadow: none;
 }
 
 .ai-result-count {
@@ -586,13 +591,23 @@ button {
   line-height: 18px;
 }
 
-.recognized-table {
+.ai-result-divider {
+  margin: 12px 0;
+}
+
+.recognized-table-wrap {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .recognized-table .ant-table {
   border-radius: 10px;
   overflow: hidden;
+}
+
+.recognized-table .ant-table-body {
+  overflow-y: auto !important;
 }
 
 .recognized-table .ant-table-thead > tr > th {
@@ -605,8 +620,7 @@ button {
 }
 
 .upload-box {
-  flex: none;
-  margin: 14px 0;
+  width: 100%;
 }
 
 .upload-box .ant-upload.ant-upload-drag {
@@ -641,9 +655,14 @@ button {
 }
 
 @media (max-width: 768px) {
-  .ai-control-card,
-  .ai-result-card {
-    min-height: auto;
+  .ai-recognition-modal .ant-modal-body {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .ai-recognition-layout > .ant-col:last-child {
+    display: block;
   }
 }
 
@@ -672,7 +691,7 @@ button {
   font-size: 15px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
 }
 
 .vxe-table .vxe-body--row {
