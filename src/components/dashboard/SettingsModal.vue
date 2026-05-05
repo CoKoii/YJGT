@@ -1,21 +1,32 @@
 <script setup lang="ts">
 import type { AiConfig, BudgetConfig, SettingsSection } from '@/types'
+import { followRatio } from '@/utils/calculations'
+import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   budget: BudgetConfig
   aiConfig: AiConfig
-  ratio: { blogger: number; mine: number }
   section: SettingsSection
 }>()
 
-defineEmits<{
+const editingRatio = computed(() => followRatio(props.budget))
+
+const emit = defineEmits<{
   (event: 'update:open', value: boolean): void
   (event: 'update:section', value: SettingsSection): void
   (event: 'save'): void
   (event: 'update:budget', value: BudgetConfig): void
   (event: 'update:aiConfig', value: AiConfig): void
 }>()
+
+function updateBudgetField(field: keyof BudgetConfig, value: number | null) {
+  emit('update:budget', { ...props.budget, [field]: Number(value ?? 0) })
+}
+
+function updateAiField(field: keyof AiConfig, value: string) {
+  emit('update:aiConfig', { ...props.aiConfig, [field]: value })
+}
 </script>
 
 <template>
@@ -57,7 +68,7 @@ defineEmits<{
                 <div class="settings-title">预算</div>
                 <div class="settings-description">用于计算跟投比例、仓位占比和剩余可投入金额。</div>
               </div>
-              <div class="settings-summary">跟投比例 {{ ratio.blogger.toFixed(2) }} : 1</div>
+              <div class="settings-summary">跟投比例 {{ editingRatio.blogger.toFixed(2) }} : 1</div>
             </div>
             <div class="settings-list">
               <div class="settings-row">
@@ -71,7 +82,7 @@ defineEmits<{
                     :min="0"
                     :precision="2"
                     addon-before="¥"
-                    @update:value="$emit('update:budget', { ...budget, myBudget: Number($event ?? 0) })"
+                    @update:value="updateBudgetField('myBudget', $event)"
                   />
                 </div>
               </div>
@@ -86,7 +97,7 @@ defineEmits<{
                     :min="0"
                     :precision="2"
                     addon-before="¥"
-                    @update:value="$emit('update:budget', { ...budget, bloggerBudget: Number($event ?? 0) })"
+                    @update:value="updateBudgetField('bloggerBudget', $event)"
                   />
                 </div>
               </div>
@@ -109,7 +120,7 @@ defineEmits<{
                   <a-input
                     :value="aiConfig.baseURL"
                     placeholder="请输入 Base URL"
-                    @update:value="$emit('update:aiConfig', { ...aiConfig, baseURL: $event })"
+                    @update:value="updateAiField('baseURL', $event)"
                   />
                 </div>
               </div>
@@ -122,7 +133,7 @@ defineEmits<{
                   <a-input
                     :value="aiConfig.model"
                     placeholder="请输入模型名称"
-                    @update:value="$emit('update:aiConfig', { ...aiConfig, model: $event })"
+                    @update:value="updateAiField('model', $event)"
                   />
                 </div>
               </div>
@@ -136,7 +147,7 @@ defineEmits<{
                     :value="aiConfig.apiKey"
                     autocomplete="new-password"
                     placeholder="sk-..."
-                    @update:value="$emit('update:aiConfig', { ...aiConfig, apiKey: $event })"
+                    @update:value="updateAiField('apiKey', $event)"
                   />
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { BarChartOutlined, BulbOutlined, SettingOutlined } from '@ant-design/ico
 import OverviewPanel from '@/components/dashboard/OverviewPanel.vue'
 import PortfolioTable from '@/components/dashboard/PortfolioTable.vue'
 import { usePortfolioDashboard } from '@/composables/usePortfolioDashboard'
+import type { AiConfig, BudgetConfig } from '@/types'
 import {
   formatMoney,
   formatNumber,
@@ -89,6 +90,22 @@ function getOperationTitle() {
         : '记录转换'
   return `${actionText}：${operationForm.fundName}（${operationForm.fundCode}）`
 }
+
+function patchBudget(field: keyof BudgetConfig, value: number | null) {
+  store.setBudget({ ...store.budget, [field]: Number(value ?? 0) })
+}
+
+function mergeState<T extends object>(target: T, value: Partial<T>) {
+  Object.assign(target, value)
+}
+
+function updateBudgetForm(value: BudgetConfig) {
+  mergeState(budgetForm, value)
+}
+
+function updateAiConfigForm(value: AiConfig) {
+  mergeState(aiConfigForm, value)
+}
 </script>
 
 <template>
@@ -132,8 +149,8 @@ function getOperationTitle() {
             :ratio="ratio"
             :should-invest="shouldInvest"
             :format-money="formatMoney"
-            @update:blogger-budget="store.setBudget({ ...store.budget, bloggerBudget: Number($event ?? 0) })"
-            @update:my-budget="store.setBudget({ ...store.budget, myBudget: Number($event ?? 0) })"
+            @update:blogger-budget="patchBudget('bloggerBudget', $event)"
+            @update:my-budget="patchBudget('myBudget', $event)"
           />
 
           <a-row :gutter="[12, 12]" align="stretch" class="content-row">
@@ -186,12 +203,11 @@ function getOperationTitle() {
         :open="isBudgetModalOpen"
         :budget="budgetForm"
         :ai-config="aiConfigForm"
-        :ratio="ratio"
         :section="settingsSection"
         @update:open="isBudgetModalOpen = $event"
         @update:section="settingsSection = $event"
-        @update:budget="Object.assign(budgetForm, $event)"
-        @update:ai-config="Object.assign(aiConfigForm, $event)"
+        @update:budget="updateBudgetForm"
+        @update:ai-config="updateAiConfigForm"
         @save="saveSettings"
       />
 
@@ -200,7 +216,7 @@ function getOperationTitle() {
         :form="holdingForm"
         :is-fund-info-loading="isFundInfoLoading"
         @update:open="isHoldingModalOpen = $event"
-        @update:form="Object.assign(holdingForm, $event)"
+        @update:form="mergeState(holdingForm, $event)"
         @save="saveHolding"
         @fill-name="fillFundNameByCode"
       />
@@ -211,7 +227,7 @@ function getOperationTitle() {
         :format-number="formatNumber"
         :title="getOperationTitle()"
         @update:open="isOperationModalOpen = $event"
-        @update:form="Object.assign(operationForm, $event)"
+        @update:form="mergeState(operationForm, $event)"
         @save="saveOperation"
         @sync-my-amount="syncMyOperationAmount"
         @set-share="setConvertShare"
