@@ -67,16 +67,16 @@ defineEmits<{
         <div class="portfolio-actions">
           <a-button type="primary" @click="$emit('create')">
             <template #icon><PlusOutlined /></template>
-            新增持仓
+            添加持仓
           </a-button>
           <a-button @click="$emit('open-ai')">
             <template #icon><RobotOutlined /></template>
-            AI 识别
+            截图识别
           </a-button>
           <a-dropdown>
             <a-button>
               <template #icon><DownloadOutlined /></template>
-              导出数据
+              导出
               <DownOutlined />
             </a-button>
             <template #overlay>
@@ -85,8 +85,8 @@ defineEmits<{
                   ({ key }: { key: string | number }) => $emit('export', key as 'json' | 'csv')
                 "
               >
-                <a-menu-item key="json">导出 JSON</a-menu-item>
-                <a-menu-item key="csv">导出 CSV</a-menu-item>
+                <a-menu-item key="json">导出为 JSON</a-menu-item>
+                <a-menu-item key="csv">导出为 CSV</a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>

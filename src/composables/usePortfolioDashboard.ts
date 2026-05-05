@@ -225,7 +225,7 @@ export function usePortfolioDashboard() {
     store.setBudget({ ...budgetForm })
     store.setAiConfig({ ...aiConfigForm })
     isBudgetModalOpen.value = false
-    message.success('设置已更新')
+    message.success('设置已保存')
   }
 
   function openCreateModal() {
@@ -250,7 +250,7 @@ export function usePortfolioDashboard() {
       fundCode: holdingForm.fundCode.trim(),
     })
     isHoldingModalOpen.value = false
-    message.success('持仓已保存')
+    message.success('持仓已更新')
   }
 
   async function fillFundNameByCode() {
@@ -377,7 +377,7 @@ export function usePortfolioDashboard() {
     )
 
     isOperationModalOpen.value = false
-    message.success('操作已记录')
+    message.success('操作已保存')
   }
 
   function openOperationDetail(operations: HoldingOperation[]) {
@@ -387,15 +387,15 @@ export function usePortfolioDashboard() {
 
   function revokeSelectedOperations() {
     Modal.confirm({
-      title: '撤回操作',
-      content: '确认撤回这笔操作记录？撤回后将从确认中记录里移除。',
-      okText: '确认',
-      cancelText: '取消',
+      title: '删除操作记录',
+      content: '确认删除这条操作记录吗？删除后将无法恢复。',
+      okText: '删除',
+      cancelText: '再想想',
       onOk: () => {
         store.removeOperations(selectedOperations.value.map((operation) => operation.id))
         selectedOperations.value = []
         isOperationDetailOpen.value = false
-        message.success('操作已撤回')
+        message.success('操作记录已删除')
       },
     })
   }
@@ -403,10 +403,10 @@ export function usePortfolioDashboard() {
   function removeHolding(record: Holding) {
     Modal.confirm({
       title: '删除持仓',
-      content: `确认删除 ${record.fundName}？`,
-      okText: '确认',
+      content: `确认删除 ${record.fundName} 吗？`,
+      okText: '删除',
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: '再想想',
       onOk: () => {
         store.removeHolding(record.id)
         if (selectedHoldingId.value === record.id) {
@@ -480,7 +480,7 @@ export function usePortfolioDashboard() {
       )
       const missingCodeCount = recognizedRows.value.filter((row) => !row.fundCode).length
       message.success(
-        `识别到 ${recognizedRows.value.length} 条持仓${missingCodeCount ? `，${missingCodeCount} 条未匹配代码` : ''}`,
+        `已识别 ${recognizedRows.value.length} 条持仓${missingCodeCount ? `，其中 ${missingCodeCount} 条暂未匹配代码` : ''}`,
       )
     } catch (error) {
       message.error(error instanceof Error ? error.message : '识别失败')
@@ -492,14 +492,14 @@ export function usePortfolioDashboard() {
   function applyRecognized() {
     const validRows = recognizedRows.value.filter((row) => FUND_CODE_PATTERN.test(row.fundCode))
     if (validRows.length === 0) {
-      message.warning('没有可写入的有效识别结果')
+      message.warning('当前没有可写入的有效识别结果')
       return
     }
 
     store.applyRecognizedHoldings(aiSide.value, validRows)
     resetAiRecognition()
     isAiModalOpen.value = false
-    message.success(`已写入 ${validRows.length} 条持仓`)
+    message.success(`已导入 ${validRows.length} 条持仓`)
   }
 
   async function sendAiChatMessage(input?: string) {

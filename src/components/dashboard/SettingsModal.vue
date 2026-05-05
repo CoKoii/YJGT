@@ -33,11 +33,11 @@ function updateAiField(field: keyof AiConfig, value: string) {
   <a-modal
     :open="open"
     centered
-    title="设置"
+    title="偏好设置"
     width="860px"
     wrap-class-name="settings-modal"
-    ok-text="确认"
-    cancel-text="取消"
+    ok-text="保存设置"
+    cancel-text="暂不保存"
     @update:open="$emit('update:open', $event)"
     @ok="$emit('save')"
   >
@@ -58,7 +58,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
             :class="{ active: section === 'ai' }"
             @click="$emit('update:section', 'ai')"
           >
-            AI 识别
+            AI 服务
           </button>
         </nav>
         <section class="settings-content">
@@ -66,7 +66,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
             <div class="settings-hero">
               <div>
                 <div class="settings-title">预算</div>
-                <div class="settings-description">用于计算跟投比例、仓位占比和剩余可投入金额。</div>
+                <div class="settings-description">填写这套组合的预算信息</div>
               </div>
               <div class="settings-summary">跟投比例 {{ editingRatio.blogger.toFixed(2) }} : 1</div>
             </div>
@@ -74,7 +74,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">我的总预算</div>
-                  <div class="settings-item-description">你计划用于跟投的总资金。</div>
+                  <div class="settings-item-description">你计划投入的总金额</div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input-number
@@ -89,7 +89,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">博主总预算</div>
-                  <div class="settings-item-description">用于换算博主持仓到你的目标持仓。</div>
+                  <div class="settings-item-description">博主计划投入的总金额</div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input-number
@@ -106,22 +106,20 @@ function updateAiField(field: keyof AiConfig, value: string) {
           <div v-else class="settings-pane">
             <div class="settings-hero">
               <div>
-                <div class="settings-title">AI 识别</div>
-                <div class="settings-description">配置持仓截图识别使用的模型服务。</div>
+                <div class="settings-title">AI 服务</div>
+                <div class="settings-description">填写模型服务信息，用于聊天和截图识别</div>
               </div>
             </div>
             <div class="settings-list">
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">Base URL</div>
-                  <div class="settings-item-description">
-                    必填，AI 聊天与识图都只会使用这里配置的服务地址。
-                  </div>
+                  <div class="settings-item-description">模型服务地址</div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input
                     :value="aiConfig.baseURL"
-                    placeholder="请输入 Base URL"
+                    placeholder="请输入服务地址"
                     @update:value="updateAiField('baseURL', $event)"
                   />
                 </div>
@@ -129,7 +127,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">模型名称</div>
-                  <div class="settings-item-description">用于识别截图内容的视觉模型。</div>
+                  <div class="settings-item-description">要使用的模型</div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input
@@ -142,9 +140,7 @@ function updateAiField(field: keyof AiConfig, value: string) {
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">API Key</div>
-                  <div class="settings-item-description">
-                    只保存在本机浏览器，用于调用上面的模型服务。
-                  </div>
+                  <div class="settings-item-description">接口密钥</div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input-password

@@ -59,7 +59,7 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
 </script>
 
 <template>
-  <a-card title="AI 助手" size="small" class="ai-chat-card">
+  <a-card title="智能助手" size="small" class="ai-chat-card">
     <template #extra>
       <a-button
         type="text"
@@ -72,7 +72,7 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
     </template>
     <div ref="bodyRef" class="ai-chat-body">
       <div v-if="messages.length === 0" class="ai-chat-empty">
-        可以询问当前持仓、我的和博主收益、跟投差异，或搜索基金信息。
+        可以直接问持仓情况、收益对比、跟投偏差，也可以查询基金信息。
       </div>
       <div
         v-for="message in messages"
@@ -91,7 +91,7 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
         :value="draftInput"
         class="ai-chat-textarea"
         :disabled="isStreaming"
-        placeholder="问问当前持仓、收益差异，或输入基金代码/名称查询"
+        placeholder="比如：我现在和博主的仓位差多少？"
         @update:value="handleInputChange"
         @press-enter="handlePressEnter"
       />

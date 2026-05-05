@@ -80,11 +80,11 @@ watch(
   <a-modal
     :open="open"
     centered
-    title="AI 识别持仓截图"
+    title="通过截图导入持仓"
     width="1040px"
     wrap-class-name="ai-recognition-modal"
-    ok-text="确认"
-    cancel-text="取消"
+    ok-text="写入持仓"
+    cancel-text="稍后再说"
     @update:open="$emit('update:open', $event)"
     @ok="$emit('apply')"
   >
@@ -93,7 +93,7 @@ watch(
         <a-card size="small" class="ai-control-card">
           <div class="ai-control-stack">
             <div class="ai-control-section">
-              <div class="ai-card-title">选择截图类型</div>
+              <div class="ai-card-title">选择截图来源</div>
               <a-radio-group
                 :value="aiSide"
                 button-style="solid"
@@ -115,8 +115,8 @@ watch(
             >
               <div class="upload-content">
                 <p class="ant-upload-drag-icon"><InboxOutlined /></p>
-                <p class="ant-upload-text">上传持仓截图</p>
-                <p class="ant-upload-hint">支持多张连续截图，自动匹配基金代码、金额、收益</p>
+                <p class="ant-upload-text">拖入或选择持仓截图</p>
+                <p class="ant-upload-hint">支持多张连续截图，会自动识别基金、金额和收益</p>
               </div>
             </a-upload-dragger>
             <a-button
@@ -127,7 +127,7 @@ watch(
               class="ai-recognize-button"
               @click="$emit('recognize')"
             >
-              <RobotOutlined />开始识别
+              <RobotOutlined />开始导入
             </a-button>
           </div>
         </a-card>
@@ -138,7 +138,7 @@ watch(
             <a-row justify="space-between" align="top" :wrap="false">
               <a-col>
                 <div class="ai-card-title">识别结果</div>
-                <div class="ai-card-subtitle">确认无误后点击 OK 写入持仓</div>
+                <div class="ai-card-subtitle">确认无误后，可直接写入当前持仓</div>
               </a-col>
               <a-col>
                 <div class="ai-result-summary">
@@ -160,7 +160,7 @@ watch(
           <div ref="tableWrapRef" class="recognized-table-wrap">
             <a-table
               :data-source="recognizedRows"
-              :locale="{ emptyText: '暂无数据' }"
+              :locale="{ emptyText: '上传截图后，识别结果会显示在这里' }"
               :pagination="false"
               :scroll="{ y: tableScrollY }"
               size="small"
@@ -171,7 +171,7 @@ watch(
                 <template #default="{ record }">
                   <div class="recognized-fund-cell">
                     <div class="recognized-fund-name">{{ record.fundName }}</div>
-                    <div class="recognized-fund-code">{{ record.fundCode || '未匹配代码' }}</div>
+                    <div class="recognized-fund-code">{{ record.fundCode || '暂未识别到代码' }}</div>
                   </div>
                 </template>
               </a-table-column>

@@ -21,7 +21,7 @@ defineEmits<{
   <a-modal
     :open="open"
     centered
-    title="操作详情"
+    title="操作记录"
     :footer="null"
     width="620px"
     @update:open="$emit('update:open', $event)"
@@ -29,7 +29,7 @@ defineEmits<{
     <a-space v-if="selectedOperation" direction="vertical" :size="12" class="full-width">
       <a-descriptions bordered size="small" :column="1">
         <a-descriptions-item label="状态">
-          {{ selectedOperation.status === 'pending' ? '确认中' : '已确认' }}
+          {{ selectedOperation.status === 'pending' ? '待处理' : '已确认' }}
         </a-descriptions-item>
         <a-descriptions-item label="操作">{{
           getOperationActionText(selectedOperation.type)
@@ -64,10 +64,10 @@ defineEmits<{
               <strong>{{ formatNumber(selectedOperationsBySide[side]?.share ?? 0) }}</strong>
             </div>
           </div>
-          <div v-else class="operation-side-empty">未记录</div>
+          <div v-else class="operation-side-empty">暂无记录</div>
         </div>
       </div>
-      <a-button block danger @click="$emit('revoke')">撤回操作</a-button>
+      <a-button block danger @click="$emit('revoke')">删除这条记录</a-button>
     </a-space>
   </a-modal>
 </template>

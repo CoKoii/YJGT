@@ -25,8 +25,8 @@ defineEmits<{
     centered
     :title="title"
     width="560px"
-    ok-text="确认"
-    cancel-text="取消"
+    ok-text="保存"
+    cancel-text="关闭"
     @update:open="$emit('update:open', $event)"
     @ok="$emit('save')"
   >
@@ -70,7 +70,7 @@ defineEmits<{
                   :min="0"
                   :max="form.bloggerTotalShare"
                   :precision="2"
-                  placeholder="手动份额"
+                  placeholder="手动输入份额"
                   style="width: 130px"
                   @update:value="
                     $emit('update:form', { ...form, bloggerShare: Number($event ?? 0) })
@@ -94,7 +94,7 @@ defineEmits<{
                   :min="0"
                   :max="form.myTotalShare"
                   :precision="2"
-                  placeholder="手动份额"
+                  placeholder="手动输入份额"
                   style="width: 130px"
                   @update:value="$emit('update:form', { ...form, myShare: Number($event ?? 0) })"
                   @change="$emit('sync-convert-amount', 'mine')"
@@ -107,7 +107,7 @@ defineEmits<{
               <a-input
                 :value="form.toFundCode"
                 :maxlength="6"
-                placeholder="请输入 6 位基金代码"
+                placeholder="输入 6 位基金代码"
                 @update:value="$emit('update:form', { ...form, toFundCode: $event })"
                 @blur="$emit('fill-target-name')"
                 @press-enter="$emit('fill-target-name')"
@@ -118,7 +118,7 @@ defineEmits<{
             <a-form-item label="转入基金名称">
               <a-input
                 :value="form.toFundName"
-                placeholder="输入代码后自动填充，可手动修改"
+                placeholder="输入代码后自动带出，也可以手动填写"
                 @update:value="$emit('update:form', { ...form, toFundName: $event })"
               />
             </a-form-item>

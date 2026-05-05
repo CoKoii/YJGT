@@ -93,11 +93,7 @@ const {
 
 function getOperationTitle() {
   const actionText =
-    operationForm.type === 'buy'
-      ? '记录买入'
-      : operationForm.type === 'sell'
-        ? '记录卖出'
-        : '记录转换'
+    operationForm.type === 'buy' ? '新增买入' : operationForm.type === 'sell' ? '新增卖出' : '新增转换'
   return `${actionText}：${operationForm.fundName}（${operationForm.fundCode}）`
 }
 
@@ -142,7 +138,7 @@ function updateAiConfigForm(value: AiConfig) {
           <a-col>
             <a-space>
               <a-button type="text" shape="circle"><BulbOutlined /></a-button>
-              <a-button type="text" @click="openBudgetModal"><SettingOutlined />设置</a-button>
+              <a-button type="text" @click="openBudgetModal"><SettingOutlined />偏好设置</a-button>
             </a-space>
           </a-col>
         </a-row>

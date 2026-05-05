@@ -19,10 +19,10 @@ defineEmits<{
   <a-modal
     :open="open"
     centered
-    title="持仓记录"
+    title="添加持仓"
     width="720px"
-    ok-text="确认"
-    cancel-text="取消"
+    ok-text="保存"
+    cancel-text="关闭"
     @update:open="$emit('update:open', $event)"
     @ok="$emit('save')"
   >
@@ -33,7 +33,7 @@ defineEmits<{
             <a-input
               :value="form.fundCode"
               :maxlength="6"
-              placeholder="先输入 6 位基金代码"
+              placeholder="输入 6 位基金代码"
               @update:value="$emit('update:form', { ...form, fundCode: $event })"
               @blur="$emit('fill-name')"
               @press-enter="$emit('fill-name')"
@@ -44,7 +44,7 @@ defineEmits<{
           <a-form-item label="基金名称">
             <a-input
               :value="form.fundName"
-              placeholder="输入代码后自动填充，可手动修改"
+              placeholder="输入代码后自动带出，也可以手动填写"
               @update:value="$emit('update:form', { ...form, fundName: $event })"
             >
               <template v-if="isFundInfoLoading" #suffix>
