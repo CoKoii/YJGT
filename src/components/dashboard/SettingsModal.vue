@@ -112,10 +112,12 @@ function updateAiField(field: keyof AiConfig, value: string) {
             </div>
             <div class="settings-list">
               <div class="settings-row">
-                  <div class="settings-row-meta">
-                    <div class="settings-item-title">Base URL</div>
-                    <div class="settings-item-description">必填，AI 聊天与识图都只会使用这里配置的服务地址。</div>
+                <div class="settings-row-meta">
+                  <div class="settings-item-title">Base URL</div>
+                  <div class="settings-item-description">
+                    必填，AI 聊天与识图都只会使用这里配置的服务地址。
                   </div>
+                </div>
                 <div class="settings-control settings-control-wide">
                   <a-input
                     :value="aiConfig.baseURL"
@@ -140,7 +142,9 @@ function updateAiField(field: keyof AiConfig, value: string) {
               <div class="settings-row">
                 <div class="settings-row-meta">
                   <div class="settings-item-title">API Key</div>
-                  <div class="settings-item-description">只保存在本机浏览器，用于调用上面的模型服务。</div>
+                  <div class="settings-item-description">
+                    只保存在本机浏览器，用于调用上面的模型服务。
+                  </div>
                 </div>
                 <div class="settings-control settings-control-wide">
                   <a-input-password

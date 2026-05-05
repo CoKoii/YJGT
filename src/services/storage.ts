@@ -1,4 +1,10 @@
-import { AI_CHAT_STORAGE_KEY, DEFAULT_AI_CONFIG, DEFAULT_BUDGET, PORTFOLIO_SCHEMA_VERSION, STORAGE_KEY } from '@/constants/portfolio'
+import {
+  AI_CHAT_STORAGE_KEY,
+  DEFAULT_AI_CONFIG,
+  DEFAULT_BUDGET,
+  PORTFOLIO_SCHEMA_VERSION,
+  STORAGE_KEY,
+} from '@/constants/portfolio'
 import type { AiChatMessage, PortfolioState } from '@/types'
 
 interface PersistedPortfolio {

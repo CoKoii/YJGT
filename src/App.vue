@@ -18,12 +18,22 @@ import {
 } from '@/utils/calculations'
 
 const AiChatPanel = defineAsyncComponent(() => import('@/components/dashboard/AiChatPanel.vue'))
-const AiRecognitionModal = defineAsyncComponent(() => import('@/components/dashboard/AiRecognitionModal.vue'))
-const HoldingDetailModal = defineAsyncComponent(() => import('@/components/dashboard/HoldingDetailModal.vue'))
+const AiRecognitionModal = defineAsyncComponent(
+  () => import('@/components/dashboard/AiRecognitionModal.vue'),
+)
+const HoldingDetailModal = defineAsyncComponent(
+  () => import('@/components/dashboard/HoldingDetailModal.vue'),
+)
 const HoldingModal = defineAsyncComponent(() => import('@/components/dashboard/HoldingModal.vue'))
-const HoldingTrendCard = defineAsyncComponent(() => import('@/components/dashboard/HoldingTrendCard.vue'))
-const OperationDetailModal = defineAsyncComponent(() => import('@/components/dashboard/OperationDetailModal.vue'))
-const OperationModal = defineAsyncComponent(() => import('@/components/dashboard/OperationModal.vue'))
+const HoldingTrendCard = defineAsyncComponent(
+  () => import('@/components/dashboard/HoldingTrendCard.vue'),
+)
+const OperationDetailModal = defineAsyncComponent(
+  () => import('@/components/dashboard/OperationDetailModal.vue'),
+)
+const OperationModal = defineAsyncComponent(
+  () => import('@/components/dashboard/OperationModal.vue'),
+)
 const SettingsModal = defineAsyncComponent(() => import('@/components/dashboard/SettingsModal.vue'))
 
 const {

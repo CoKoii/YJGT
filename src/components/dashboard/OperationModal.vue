@@ -58,7 +58,9 @@ defineEmits<{
         <template v-if="form.type === 'convert'">
           <a-col :span="12">
             <a-form-item label="博主转出份额">
-              <div class="operation-estimate">当前总份额：{{ formatNumber(form.bloggerTotalShare) }}</div>
+              <div class="operation-estimate">
+                当前总份额：{{ formatNumber(form.bloggerTotalShare) }}
+              </div>
               <a-space wrap>
                 <a-button @click="$emit('set-share', 'blogger', 1 / 3)">1/3</a-button>
                 <a-button @click="$emit('set-share', 'blogger', 1 / 2)">1/2</a-button>
@@ -70,7 +72,9 @@ defineEmits<{
                   :precision="2"
                   placeholder="手动份额"
                   style="width: 130px"
-                  @update:value="$emit('update:form', { ...form, bloggerShare: Number($event ?? 0) })"
+                  @update:value="
+                    $emit('update:form', { ...form, bloggerShare: Number($event ?? 0) })
+                  "
                   @change="$emit('sync-convert-amount', 'blogger')"
                 />
               </a-space>
@@ -78,7 +82,9 @@ defineEmits<{
           </a-col>
           <a-col :span="12">
             <a-form-item label="我的转出份额">
-              <div class="operation-estimate">当前总份额：{{ formatNumber(form.myTotalShare) }}</div>
+              <div class="operation-estimate">
+                当前总份额：{{ formatNumber(form.myTotalShare) }}
+              </div>
               <a-space wrap>
                 <a-button @click="$emit('set-share', 'mine', 1 / 3)">1/3</a-button>
                 <a-button @click="$emit('set-share', 'mine', 1 / 2)">1/2</a-button>

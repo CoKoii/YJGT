@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export type InvestorSide = 'mine' | 'blogger'
 export type OperationType = 'buy' | 'sell' | 'convert'
 export type OperationStatus = 'pending' | 'confirmed'
@@ -6,18 +7,18 @@ export type TrendRange = 'month' | 'quarter' | 'half' | 'year' | 'ytd' | 'all'
 export type DetailChartMode = 'performance' | 'netWorth'
 export type SettingsSection = 'budget' | 'ai'
 
-export interface BudgetConfig {
+export type BudgetConfig = {
   myBudget: number
   bloggerBudget: number
 }
 
-export interface AiConfig {
+export type AiConfig = {
   baseURL: string
   apiKey: string
   model: string
 }
 
-export interface Holding {
+export type Holding = {
   id: string
   fundName: string
   fundCode: string
@@ -31,10 +32,9 @@ export interface Holding {
 }
 
 export type HoldingDraft = Omit<Holding, 'updatedAt'>
-
 export type HoldingFormModel = HoldingDraft
 
-export interface HoldingOperation {
+export type HoldingOperation = {
   id: string
   side: InvestorSide
   type: OperationType
@@ -51,20 +51,9 @@ export interface HoldingOperation {
   toFundName?: string
 }
 
-export interface HoldingOperationDraft {
-  side: InvestorSide
-  type: OperationType
-  amount: number
-  share?: number
-  fundCode?: string
-  fundName?: string
-  fromFundCode?: string
-  fromFundName?: string
-  toFundCode?: string
-  toFundName?: string
-}
+export type HoldingOperationDraft = Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>
 
-export interface OperationFormModel {
+export type OperationFormModel = {
   type: OperationType
   bloggerAmount: number
   myAmount: number
@@ -80,7 +69,7 @@ export interface OperationFormModel {
   toFundName: string
 }
 
-export interface ProfitSnapshot {
+export type ProfitSnapshot = {
   date: string
   myProfit: number
   bloggerProfit: number
@@ -88,40 +77,39 @@ export interface ProfitSnapshot {
   bloggerProfitRate: number
 }
 
-export interface FundTrendPoint {
+export type FundTrendPoint = {
   date: string
   value: number
 }
 
-export interface FundInfo {
+export type FundInfo = {
   code: string
   name: string
 }
 
-export interface RecognizedHolding {
+export type RecognizedHolding = {
   fundName: string
   fundCode: string
   amount: number
   profit: number
 }
 
-export interface AiChatMessage {
+export type AiChatMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
   createdAt: string
 }
 
-export interface UploadedFileMeta {
+export type UploadedFileItem = {
   uid: string
   name: string
+  originFileObj?: any
 }
 
-export interface UploadedFileItem extends UploadedFileMeta {
-  originFileObj?: File
-}
+export type UploadedFileMeta = Pick<UploadedFileItem, 'uid' | 'name'>
 
-export interface PortfolioState {
+export type PortfolioState = {
   budget: BudgetConfig
   aiConfig: AiConfig
   holdings: Holding[]
@@ -130,7 +118,7 @@ export interface PortfolioState {
   updatedAt: string
 }
 
-export interface PortfolioTotals {
+export type PortfolioTotals = {
   myAmount: number
   bloggerAmount: number
   myProfit: number
@@ -143,7 +131,7 @@ export interface PortfolioTotals {
   bloggerProfitRate: number
 }
 
-export interface HoldingRow extends Holding {
+export type HoldingRow = Holding & {
   myInvested: number
   bloggerInvested: number
   targetInvested: number

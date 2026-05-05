@@ -143,8 +143,13 @@ watch(
               <a-col>
                 <div class="ai-result-summary">
                   <span class="ai-result-count">{{ recognizedRows.length }} 条</span>
-                  <span class="ai-result-stat">总金额 {{ formatMoney(recognizedSummary.amount) }}</span>
-                  <span class="ai-result-stat" :class="recognizedSummary.profit >= 0 ? 'red' : 'green'">
+                  <span class="ai-result-stat"
+                    >总金额 {{ formatMoney(recognizedSummary.amount) }}</span
+                  >
+                  <span
+                    class="ai-result-stat"
+                    :class="recognizedSummary.profit >= 0 ? 'red' : 'green'"
+                  >
                     总收益 {{ formatMoney(recognizedSummary.profit) }}
                   </span>
                 </div>

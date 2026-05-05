@@ -1,39 +1,25 @@
+import { HumanMessage } from '@langchain/core/messages'
 import type { AiConfig, RecognizedHolding } from '@/types'
+import { assertAiConfig, createAiModel, readAiTextContent } from './shared'
 
 function extractJson(text: string): RecognizedHolding[] {
-  const match = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/)
+  const match = text.match(/\[[\s\S]*\]/)
+
   if (!match) {
-    throw new Error('模型未返回 JSON')
+    throw new Error('模型未返回 JSON 数组')
   }
 
-  const parsed = JSON.parse(match[0]) as RecognizedHolding | RecognizedHolding[]
-  return Array.isArray(parsed) ? parsed : [parsed]
+  return JSON.parse(match[0]) as RecognizedHolding[]
 }
 
-export async function recognizeHoldingImage(
-  config: AiConfig,
-  imageDataUrls: string[],
-): Promise<RecognizedHolding[]> {
-  if (!config.baseURL.trim() || !config.apiKey.trim() || !config.model.trim()) {
-    throw new Error('请先完整填写 AI Base URL、API Key 和模型名称')
-  }
+export async function recognizeHoldingImage(config: AiConfig, imageDataUrls: string[]) {
+  assertAiConfig(config)
+
   if (imageDataUrls.length === 0) {
     throw new Error('请先上传截图')
   }
 
-  const [{ HumanMessage }, { ChatOpenAI }] = await Promise.all([
-    import('@langchain/core/messages'),
-    import('@langchain/openai'),
-  ])
-
-  const model = new ChatOpenAI({
-    apiKey: config.apiKey,
-    model: config.model,
-    temperature: 0,
-    configuration: { baseURL: config.baseURL.trim() },
-  })
-
-  const response = await model.invoke([
+  const response = await createAiModel(config).invoke([
     new HumanMessage({
       content: [
         {
@@ -66,9 +52,5 @@ export async function recognizeHoldingImage(
     }),
   ])
 
-  const content = Array.isArray(response.content)
-    ? response.content.map((item) => (typeof item === 'string' ? item : item.text)).join('\n')
-    : response.content
-
-  return extractJson(content)
+  return extractJson(readAiTextContent(response.content))
 }

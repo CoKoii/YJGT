@@ -1,4 +1,11 @@
-import type { BudgetConfig, FundTrendPoint, Holding, HoldingOperation, InvestorSide, OperationType } from '@/types'
+import type {
+  BudgetConfig,
+  FundTrendPoint,
+  Holding,
+  HoldingOperation,
+  InvestorSide,
+  OperationType,
+} from '@/types'
 import { formatDateKey, normalizeDateKey, parseLocalDate } from '@/utils/date'
 
 export const moneyFormatter = new Intl.NumberFormat('zh-CN', {
@@ -115,7 +122,10 @@ export function filterTrendByRange(points: FundTrendPoint[], range: string): Fun
   return points.filter((item) => parseLocalDate(item.date) >= start)
 }
 
-export function findNearestTrendPoint(points: FundTrendPoint[], date: string): FundTrendPoint | null {
+export function findNearestTrendPoint(
+  points: FundTrendPoint[],
+  date: string,
+): FundTrendPoint | null {
   if (points.length === 0) return null
 
   return (
@@ -136,7 +146,11 @@ export function toPerformanceTrend(points: FundTrendPoint[]): FundTrendPoint[] {
   }))
 }
 
-export function buildRateSeriesData(points: FundTrendPoint[], startDate: string, rate: number): Array<string | null> {
+export function buildRateSeriesData(
+  points: FundTrendPoint[],
+  startDate: string,
+  rate: number,
+): Array<string | null> {
   return points.map((item) => (item.date >= startDate ? rate.toFixed(2) : null))
 }
 

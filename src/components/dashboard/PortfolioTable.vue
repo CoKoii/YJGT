@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { DownloadOutlined, DownOutlined, EditOutlined, PlusOutlined, RobotOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import {
+  DownloadOutlined,
+  DownOutlined,
+  EditOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons-vue'
 import type { HoldingOperation, HoldingRow, OperationType } from '@/types'
 
 defineProps<{
@@ -39,9 +46,13 @@ defineEmits<{
         <div class="portfolio-summary">
           <span class="portfolio-title">持仓列表</span>
           <span class="summary-label">我的今日收益</span>
-          <span :class="todayProfit.mine >= 0 ? 'red' : 'green'">{{ formatMoney(todayProfit.mine) }}</span>
+          <span :class="todayProfit.mine >= 0 ? 'red' : 'green'">{{
+            formatMoney(todayProfit.mine)
+          }}</span>
           <span class="summary-label">博主今日收益</span>
-          <span :class="todayProfit.blogger >= 0 ? 'red' : 'green'">{{ formatMoney(todayProfit.blogger) }}</span>
+          <span :class="todayProfit.blogger >= 0 ? 'red' : 'green'">{{
+            formatMoney(todayProfit.blogger)
+          }}</span>
           <span class="summary-label">我的总收益</span>
           <span :class="totals.myProfit >= 0 ? 'red' : 'green'">
             {{ formatMoney(totals.myProfit) }}（{{ formatPercent(totals.myProfitRate) }}）
@@ -69,7 +80,11 @@ defineEmits<{
               <DownOutlined />
             </a-button>
             <template #overlay>
-              <a-menu @click="({ key }: { key: string | number }) => $emit('export', key as 'json' | 'csv')">
+              <a-menu
+                @click="
+                  ({ key }: { key: string | number }) => $emit('export', key as 'json' | 'csv')
+                "
+              >
                 <a-menu-item key="json">导出 JSON</a-menu-item>
                 <a-menu-item key="csv">导出 CSV</a-menu-item>
               </a-menu>
@@ -116,9 +131,14 @@ defineEmits<{
         <vxe-column title="我的持仓金额" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
-              <div class="target-line" :class="getFollowTrendClass(row.myInvested, row.targetInvested)">
+              <div
+                class="target-line"
+                :class="getFollowTrendClass(row.myInvested, row.targetInvested)"
+              >
                 <span class="metric-main money-main">{{ formatNumber(row.myInvested) }}</span>
-                <span class="target-arrow">{{ getFollowTrendIcon(row.myInvested, row.targetInvested) }}</span>
+                <span class="target-arrow">{{
+                  getFollowTrendIcon(row.myInvested, row.targetInvested)
+                }}</span>
               </div>
               <span class="target-hint">应投入：{{ formatNumber(row.targetInvested) }}</span>
             </div>
@@ -126,24 +146,39 @@ defineEmits<{
         </vxe-column>
         <vxe-column title="博主占比" align="right">
           <template #default="{ row }">
-            <span class="metric-main percent-main">{{ formatPlainPercent(row.bloggerPositionRate) }}</span>
+            <span class="metric-main percent-main">{{
+              formatPlainPercent(row.bloggerPositionRate)
+            }}</span>
           </template>
         </vxe-column>
         <vxe-column title="我的占比" align="right">
           <template #default="{ row }">
-            <div class="target-line" :class="getFollowTrendClass(row.myPositionRate, row.bloggerPositionRate)">
-              <span class="metric-main percent-main">{{ formatPlainPercent(row.myPositionRate) }}</span>
-              <span class="target-arrow">{{ getFollowTrendIcon(row.myPositionRate, row.bloggerPositionRate) }}</span>
+            <div
+              class="target-line"
+              :class="getFollowTrendClass(row.myPositionRate, row.bloggerPositionRate)"
+            >
+              <span class="metric-main percent-main">{{
+                formatPlainPercent(row.myPositionRate)
+              }}</span>
+              <span class="target-arrow">{{
+                getFollowTrendIcon(row.myPositionRate, row.bloggerPositionRate)
+              }}</span>
             </div>
           </template>
         </vxe-column>
         <vxe-column title="博主盈亏金额" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
-              <span class="metric-main money-main profit-value" :class="row.bloggerProfit >= 0 ? 'red' : 'green'">
+              <span
+                class="metric-main money-main profit-value"
+                :class="row.bloggerProfit >= 0 ? 'red' : 'green'"
+              >
                 {{ formatMoney(row.bloggerProfit) }}
               </span>
-              <span class="target-hint profit-value" :class="row.bloggerRate >= 0 ? 'red' : 'green'">
+              <span
+                class="target-hint profit-value"
+                :class="row.bloggerRate >= 0 ? 'red' : 'green'"
+              >
                 {{ formatPercent(row.bloggerRate) }}
               </span>
             </div>
@@ -152,7 +187,10 @@ defineEmits<{
         <vxe-column title="我的盈亏金额" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
-              <span class="metric-main money-main profit-value" :class="row.myProfit >= 0 ? 'red' : 'green'">
+              <span
+                class="metric-main money-main profit-value"
+                :class="row.myProfit >= 0 ? 'red' : 'green'"
+              >
                 {{ formatMoney(row.myProfit) }}
               </span>
               <span class="target-hint profit-value" :class="row.myRate >= 0 ? 'red' : 'green'">
@@ -163,14 +201,20 @@ defineEmits<{
         </vxe-column>
         <vxe-column title="博主昨日收益" align="right">
           <template #default="{ row }">
-            <span class="metric-main money-main profit-value" :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
+            <span
+              class="metric-main money-main profit-value"
+              :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'"
+            >
               {{ formatMoney(row.bloggerYesterdayProfit) }}
             </span>
           </template>
         </vxe-column>
         <vxe-column title="我的昨日收益" align="right">
           <template #default="{ row }">
-            <span class="metric-main money-main profit-value" :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'">
+            <span
+              class="metric-main money-main profit-value"
+              :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'"
+            >
               {{ formatMoney(row.myYesterdayProfit) }}
             </span>
           </template>
@@ -178,9 +222,18 @@ defineEmits<{
         <vxe-column title="操作" fixed="right" align="center">
           <template #default="{ row }">
             <a-space :size="2" class="row-actions" @click.stop>
-              <a-button type="link" size="small" @click="$emit('operation', { row, type: 'buy' })">买</a-button>
-              <a-button type="link" size="small" @click="$emit('operation', { row, type: 'sell' })">卖</a-button>
-              <a-button type="link" size="small" @click="$emit('operation', { row, type: 'convert' })">转</a-button>
+              <a-button type="link" size="small" @click="$emit('operation', { row, type: 'buy' })"
+                >买</a-button
+              >
+              <a-button type="link" size="small" @click="$emit('operation', { row, type: 'sell' })"
+                >卖</a-button
+              >
+              <a-button
+                type="link"
+                size="small"
+                @click="$emit('operation', { row, type: 'convert' })"
+                >转</a-button
+              >
               <a-button type="link" size="small" title="编辑" @click="$emit('edit', row)">
                 <EditOutlined />
               </a-button>

@@ -23,7 +23,11 @@ function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
   return [...latestByDate.values()].slice(-HISTORY_LIMIT)
 }
 
-function createHoldingFromRecognition(side: InvestorSide, data: RecognizedHolding, existing?: Holding): Holding {
+function createHoldingFromRecognition(
+  side: InvestorSide,
+  data: RecognizedHolding,
+  existing?: Holding,
+): Holding {
   const base: Holding = existing ?? {
     id: crypto.randomUUID(),
     fundName: data.fundName,
@@ -38,7 +42,13 @@ function createHoldingFromRecognition(side: InvestorSide, data: RecognizedHoldin
   }
 
   return side === 'mine'
-    ? { ...base, fundName: data.fundName, fundCode: data.fundCode, myAmount: data.amount, myProfit: data.profit }
+    ? {
+        ...base,
+        fundName: data.fundName,
+        fundCode: data.fundCode,
+        myAmount: data.amount,
+        myProfit: data.profit,
+      }
     : {
         ...base,
         fundName: data.fundName,
@@ -107,7 +117,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       bloggerProfitRate: totals.value.bloggerProfitRate,
     }
 
-    history.value = [...history.value.filter((item) => item.date !== snapshot.date), snapshot].slice(-HISTORY_LIMIT)
+    history.value = [
+      ...history.value.filter((item) => item.date !== snapshot.date),
+      snapshot,
+    ].slice(-HISTORY_LIMIT)
   }
 
   function touch() {
@@ -142,7 +155,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     touch()
   }
 
-  function recordOperations(payloads: HoldingOperationDraft[], source: HoldingOperation['source'] = 'manual') {
+  function recordOperations(
+    payloads: HoldingOperationDraft[],
+    source: HoldingOperation['source'] = 'manual',
+  ) {
     const timestamp = new Date().toISOString()
     const nextOperations = payloads.map<HoldingOperation>((payload) => ({
       ...payload,

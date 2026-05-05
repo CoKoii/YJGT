@@ -4,9 +4,8 @@ import {
   EMPTY_HOLDING_DRAFT,
   FUND_CODE_PATTERN,
 } from '@/constants/portfolio'
-import { streamPortfolioChat } from '@/services/aiChat'
-import { recognizeHoldingImage } from '@/services/aiRecognition'
-import { fetchFundInfo, searchFundByName } from '@/services/fundApi'
+import { recognizeHoldingImage, streamPortfolioChat } from '@/services/ai'
+import { fetchFundInfo, searchFundByName } from '@/services/fund'
 import { loadAiChatMessages, saveAiChatMessages } from '@/services/storage'
 import { usePortfolioStore } from '@/stores/portfolio'
 import type {
@@ -418,11 +417,7 @@ export function usePortfolioDashboard() {
     })
   }
 
-  async function handleUploadChange({
-    fileList,
-  }: {
-    fileList: UploadedFileItem[]
-  }) {
+  async function handleUploadChange({ fileList }: { fileList: UploadedFileItem[] }) {
     uploadedFiles.value = fileList.map((file) => ({ uid: file.uid, name: file.name }))
     const activeIds = new Set(fileList.map((file) => file.uid))
     const nextImageDataUrls = Object.fromEntries(

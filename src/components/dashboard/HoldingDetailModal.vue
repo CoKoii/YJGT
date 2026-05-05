@@ -1,9 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { DETAIL_TREND_OPTIONS, DEFAULT_DETAIL_CHART_MODE, DEFAULT_TREND_RANGE } from '@/constants/portfolio'
-import { fetchFundNetWorthTrend } from '@/services/fundApi'
-import type { DetailChartMode, FundTrendPoint, Holding, HoldingOperation, TrendRange } from '@/types'
+import {
+  DETAIL_TREND_OPTIONS,
+  DEFAULT_DETAIL_CHART_MODE,
+  DEFAULT_TREND_RANGE,
+} from '@/constants/portfolio'
+import { fetchFundNetWorthTrend } from '@/services/fund'
+import type {
+  DetailChartMode,
+  FundTrendPoint,
+  Holding,
+  HoldingOperation,
+  TrendRange,
+} from '@/types'
 import {
   buildRateSeriesData,
   filterTrendByRange,
@@ -31,7 +41,9 @@ const detailTrend = ref<FundTrendPoint[]>([])
 const isTrendLoading = ref(false)
 let chart: echarts.ECharts | null = null
 
-const title = computed(() => (props.holding ? `${props.holding.fundName}（${props.holding.fundCode}）` : '基金详情'))
+const title = computed(() =>
+  props.holding ? `${props.holding.fundName}（${props.holding.fundCode}）` : '基金详情',
+)
 
 const relatedOperations = computed(() => {
   if (!props.holding) return []
@@ -70,7 +82,9 @@ function renderChart() {
     .filter((item) => item.side === 'mine')
     .map((item) => {
       const point = findNearestTrendPoint(chartPoints, parseHoldingUpdatedDate(item.date))
-      return point ? { value: [point.date, Number(myRate.toFixed(2))], label: getOperationLabel(item.type) } : null
+      return point
+        ? { value: [point.date, Number(myRate.toFixed(2))], label: getOperationLabel(item.type) }
+        : null
     })
     .filter(Boolean)
 
@@ -78,7 +92,12 @@ function renderChart() {
     .filter((item) => item.side === 'blogger')
     .map((item) => {
       const point = findNearestTrendPoint(chartPoints, parseHoldingUpdatedDate(item.date))
-      return point ? { value: [point.date, Number(bloggerRate.toFixed(2))], label: getOperationLabel(item.type) } : null
+      return point
+        ? {
+            value: [point.date, Number(bloggerRate.toFixed(2))],
+            label: getOperationLabel(item.type),
+          }
+        : null
     })
     .filter(Boolean)
 
@@ -176,7 +195,8 @@ function renderChart() {
                 value?: number | string | Array<number | string>
               }
               const value = Array.isArray(data.value) ? data.value.at(-1) : data.value
-              const suffix = data.seriesName?.includes('收益率') || data.seriesName === '业绩走势' ? '%' : ''
+              const suffix =
+                data.seriesName?.includes('收益率') || data.seriesName === '业绩走势' ? '%' : ''
               const formattedValue = typeof value === 'number' ? value.toFixed(2) : value
               return `${data.marker ?? ''}${data.seriesName ?? ''}: ${formattedValue ?? ''}${suffix}`
             })
@@ -207,12 +227,18 @@ function renderChart() {
   chart.resize()
 }
 
-watch(() => props.open, (open) => {
-  if (open) void loadDetailTrend()
-})
-watch(() => props.holding?.id, () => {
-  if (props.open) void loadDetailTrend()
-})
+watch(
+  () => props.open,
+  (open) => {
+    if (open) void loadDetailTrend()
+  },
+)
+watch(
+  () => props.holding?.id,
+  () => {
+    if (props.open) void loadDetailTrend()
+  },
+)
 watch([trendRange, detailChartMode], renderChart)
 
 onUnmounted(() => {

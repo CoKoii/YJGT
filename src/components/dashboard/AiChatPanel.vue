@@ -80,7 +80,10 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
         class="ai-chat-message"
         :class="message.role === 'user' ? 'user' : 'assistant'"
       >
-        <div class="ai-chat-bubble markdown-body" v-html="renderMarkdown(message.content || '...')"></div>
+        <div
+          class="ai-chat-bubble markdown-body"
+          v-html="renderMarkdown(message.content || '...')"
+        ></div>
       </div>
     </div>
     <div class="ai-chat-input">
