@@ -1,29 +1,64 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import type { AiConfig, BudgetConfig, Holding, HoldingOperation, InvestorSide, ProfitSnapshot } from '@/types'
-import { actualInvested, profitRate } from '@/utils/calculations'
-import { loadPortfolio, savePortfolio } from '@/services/storage'
+import { HISTORY_LIMIT, OPERATION_LIMIT } from '@/constants/portfolio'
+import { createEmptyPortfolioState, loadPortfolio, savePortfolio } from '@/services/storage'
+import type {
+  AiConfig,
+  BudgetConfig,
+  Holding,
+  HoldingDraft,
+  HoldingOperation,
+  HoldingOperationDraft,
+  InvestorSide,
+  PortfolioState,
+  PortfolioTotals,
+  ProfitSnapshot,
+  RecognizedHolding,
+} from '@/types'
+import { actualInvested, createHistoryDateKey, profitRate } from '@/utils/calculations'
 
-const DEFAULT_BUDGET: BudgetConfig = { myBudget: 0, bloggerBudget: 0 }
-const DEFAULT_AI_CONFIG: AiConfig = {
-  baseURL: '',
-  apiKey: '',
-  model: '',
+function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
+  const latestByDate = new Map<string, ProfitSnapshot>()
+  items.forEach((item) => latestByDate.set(item.date, item))
+  return [...latestByDate.values()].slice(-HISTORY_LIMIT)
 }
 
-type RecognizedHoldingInput = { fundName: string; fundCode: string; amount: number; profit: number }
+function createHoldingFromRecognition(side: InvestorSide, data: RecognizedHolding, existing?: Holding): Holding {
+  const base: Holding = existing ?? {
+    id: crypto.randomUUID(),
+    fundName: data.fundName,
+    fundCode: data.fundCode,
+    myAmount: 0,
+    myProfit: 0,
+    myYesterdayProfit: 0,
+    bloggerAmount: 0,
+    bloggerProfit: 0,
+    bloggerYesterdayProfit: 0,
+    updatedAt: new Date().toISOString(),
+  }
+
+  return side === 'mine'
+    ? { ...base, fundName: data.fundName, fundCode: data.fundCode, myAmount: data.amount, myProfit: data.profit }
+    : {
+        ...base,
+        fundName: data.fundName,
+        fundCode: data.fundCode,
+        bloggerAmount: data.amount,
+        bloggerProfit: data.profit,
+      }
+}
 
 export const usePortfolioStore = defineStore('portfolio', () => {
   const persisted = loadPortfolio()
-  const budget = ref<BudgetConfig>(persisted?.budget ?? { ...DEFAULT_BUDGET })
-  const aiConfig = ref<AiConfig>(persisted?.aiConfig ?? { ...DEFAULT_AI_CONFIG })
-  const holdings = ref<Holding[]>(persisted?.holdings ?? [])
-  const operations = ref<HoldingOperation[]>(persisted?.operations ?? [])
-  const history = ref<ProfitSnapshot[]>(compactHistory(persisted?.history ?? []))
-  const updatedAt = ref(persisted?.updatedAt ?? '')
+  const budget = ref<BudgetConfig>(persisted.budget)
+  const aiConfig = ref<AiConfig>(persisted.aiConfig)
+  const holdings = ref<Holding[]>(persisted.holdings)
+  const operations = ref<HoldingOperation[]>(persisted.operations)
+  const history = ref<ProfitSnapshot[]>(compactHistory(persisted.history))
+  const updatedAt = ref(persisted.updatedAt)
 
-  const totals = computed(() => {
-    const total = {
+  const totals = computed<PortfolioTotals>(() => {
+    const aggregate = {
       myAmount: 0,
       bloggerAmount: 0,
       myProfit: 0,
@@ -34,84 +69,90 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       bloggerYesterdayProfit: 0,
     }
 
-    for (const item of holdings.value) {
-      total.myAmount += item.myAmount
-      total.bloggerAmount += item.bloggerAmount
-      total.myProfit += item.myProfit
-      total.bloggerProfit += item.bloggerProfit
-      total.myInvested += actualInvested(item.myAmount, item.myProfit)
-      total.bloggerInvested += actualInvested(item.bloggerAmount, item.bloggerProfit)
-      total.myYesterdayProfit += item.myYesterdayProfit
-      total.bloggerYesterdayProfit += item.bloggerYesterdayProfit
+    for (const holding of holdings.value) {
+      aggregate.myAmount += holding.myAmount
+      aggregate.bloggerAmount += holding.bloggerAmount
+      aggregate.myProfit += holding.myProfit
+      aggregate.bloggerProfit += holding.bloggerProfit
+      aggregate.myInvested += actualInvested(holding.myAmount, holding.myProfit)
+      aggregate.bloggerInvested += actualInvested(holding.bloggerAmount, holding.bloggerProfit)
+      aggregate.myYesterdayProfit += holding.myYesterdayProfit
+      aggregate.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
     }
 
     return {
-      ...total,
-      myProfitRate: profitRate(total.myAmount, total.myProfit),
-      bloggerProfitRate: profitRate(total.bloggerAmount, total.bloggerProfit),
+      ...aggregate,
+      myProfitRate: profitRate(aggregate.myAmount, aggregate.myProfit),
+      bloggerProfitRate: profitRate(aggregate.bloggerAmount, aggregate.bloggerProfit),
     }
   })
 
-  function touch() {
-    updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
-    recordSnapshot(aggregateSnapshot())
-  }
-
-  function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
-    const latestByDate = new Map<string, ProfitSnapshot>()
-    items.forEach((item) => latestByDate.set(item.date, item))
-    return [...latestByDate.values()].slice(-90)
-  }
-
-  function recordSnapshot(snapshot: ProfitSnapshot) {
-    history.value = [...history.value.filter((item) => item.date !== snapshot.date), snapshot].slice(-90)
-  }
-
-  function aggregateSnapshot(): ProfitSnapshot {
+  function serialize(): PortfolioState {
     return {
-      date: new Date().toISOString().slice(0, 10),
+      budget: budget.value,
+      aiConfig: aiConfig.value,
+      holdings: holdings.value,
+      operations: operations.value,
+      history: history.value,
+      updatedAt: updatedAt.value,
+    }
+  }
+
+  function recordSnapshot() {
+    const snapshot: ProfitSnapshot = {
+      date: createHistoryDateKey(),
       myProfit: totals.value.myProfit,
       bloggerProfit: totals.value.bloggerProfit,
       myProfitRate: totals.value.myProfitRate,
       bloggerProfitRate: totals.value.bloggerProfitRate,
     }
+
+    history.value = [...history.value.filter((item) => item.date !== snapshot.date), snapshot].slice(-HISTORY_LIMIT)
   }
 
-  function upsertHolding(payload: Omit<Holding, 'id' | 'updatedAt'> & { id?: string }) {
-    const existingIndex = holdings.value.findIndex((item) => item.id === payload.id)
-    const next: Holding = {
+  function touch() {
+    updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
+    recordSnapshot()
+  }
+
+  function setBudget(nextBudget: BudgetConfig) {
+    budget.value = { ...nextBudget }
+  }
+
+  function setAiConfig(nextAiConfig: AiConfig) {
+    aiConfig.value = { ...nextAiConfig }
+  }
+
+  function upsertHolding(payload: HoldingDraft) {
+    const nextHolding: Holding = {
       ...payload,
-      id: payload.id ?? crypto.randomUUID(),
+      id: payload.id || crypto.randomUUID(),
       updatedAt: new Date().toISOString(),
     }
+    const index = holdings.value.findIndex((item) => item.id === nextHolding.id)
 
-    if (existingIndex >= 0) {
-      holdings.value.splice(existingIndex, 1, next)
-    } else {
-      holdings.value.unshift(next)
-    }
-    touch()
-  }
+    if (index >= 0) holdings.value.splice(index, 1, nextHolding)
+    else holdings.value.unshift(nextHolding)
 
-  function recordOperation(payload: Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>) {
-    recordOperations([payload])
-  }
-
-  function recordOperations(payloads: Array<Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>>) {
-    const now = new Date().toISOString()
-    const nextOperations: HoldingOperation[] = payloads.map((payload) => ({
-      ...payload,
-      id: crypto.randomUUID(),
-      date: now,
-      source: 'manual',
-      status: 'pending',
-    }))
-    operations.value = [...operations.value, ...nextOperations].slice(-500)
     touch()
   }
 
   function removeHolding(id: string) {
     holdings.value = holdings.value.filter((item) => item.id !== id)
+    touch()
+  }
+
+  function recordOperations(payloads: HoldingOperationDraft[], source: HoldingOperation['source'] = 'manual') {
+    const timestamp = new Date().toISOString()
+    const nextOperations = payloads.map<HoldingOperation>((payload) => ({
+      ...payload,
+      id: crypto.randomUUID(),
+      date: timestamp,
+      source,
+      status: 'pending',
+    }))
+
+    operations.value = [...operations.value, ...nextOperations].slice(-OPERATION_LIMIT)
     touch()
   }
 
@@ -121,77 +162,42 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     touch()
   }
 
-  function buildRecognizedHolding(side: InvestorSide, data: RecognizedHoldingInput): Holding {
-    const existing = holdings.value.find((item) => item.fundCode === data.fundCode)
-    const base = existing ?? {
-      id: crypto.randomUUID(),
-      fundName: data.fundName,
-      fundCode: data.fundCode,
-      myAmount: 0,
-      myProfit: 0,
-      myYesterdayProfit: 0,
-      bloggerAmount: 0,
-      bloggerProfit: 0,
-      bloggerYesterdayProfit: 0,
-      updatedAt: new Date().toISOString(),
-    }
+  function applyRecognizedHoldings(side: InvestorSide, rows: RecognizedHolding[]) {
+    const nextHoldings = [...holdings.value]
 
-    return side === 'mine'
-      ? {
-          ...base,
-          fundName: data.fundName,
-          myAmount: data.amount,
-          myProfit: data.profit,
-        }
-      : {
-          ...base,
-          fundName: data.fundName,
-          bloggerAmount: data.amount,
-          bloggerProfit: data.profit,
-        }
-  }
-
-  function applyRecognizedHolding(side: InvestorSide, data: RecognizedHoldingInput) {
-    upsertHolding(buildRecognizedHolding(side, data))
-  }
-
-  function applyRecognizedHoldings(side: InvestorSide, rows: RecognizedHoldingInput[]) {
     rows.forEach((row) => {
-      const next = {
-        ...buildRecognizedHolding(side, row),
+      const index = nextHoldings.findIndex((item) => item.fundCode === row.fundCode)
+      const existing = index >= 0 ? nextHoldings[index] : undefined
+      const nextHolding = {
+        ...createHoldingFromRecognition(side, row, existing),
         updatedAt: new Date().toISOString(),
       }
-      const existingIndex = holdings.value.findIndex((item) => item.id === next.id)
 
-      if (existingIndex >= 0) {
-        holdings.value.splice(existingIndex, 1, next)
-      } else {
-        holdings.value.unshift(next)
-      }
+      if (index >= 0) nextHoldings.splice(index, 1, nextHolding)
+      else nextHoldings.unshift(nextHolding)
     })
+
+    holdings.value = nextHoldings
     touch()
   }
 
+  function resetPortfolio() {
+    const empty = createEmptyPortfolioState()
+    budget.value = empty.budget
+    aiConfig.value = empty.aiConfig
+    holdings.value = empty.holdings
+    operations.value = empty.operations
+    history.value = empty.history
+    updatedAt.value = empty.updatedAt
+  }
+
   function exportJson(): string {
-    return JSON.stringify(
-      { budget: budget.value, holdings: holdings.value, operations: operations.value, history: history.value },
-      null,
-      2,
-    )
+    return JSON.stringify(serialize(), null, 2)
   }
 
   watch(
     [budget, aiConfig, holdings, operations, history, updatedAt],
-    () => {
-      savePortfolio({
-        budget: budget.value,
-        aiConfig: aiConfig.value,
-        holdings: holdings.value,
-        operations: operations.value,
-        history: history.value,
-        updatedAt: updatedAt.value,
-      })
-    },
+    () => savePortfolio(serialize()),
     { deep: true },
   )
 
@@ -203,13 +209,14 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     history,
     updatedAt,
     totals,
+    setBudget,
+    setAiConfig,
     upsertHolding,
     removeHolding,
-    removeOperations,
-    recordOperation,
     recordOperations,
-    applyRecognizedHolding,
+    removeOperations,
     applyRecognizedHoldings,
     exportJson,
+    resetPortfolio,
   }
 })

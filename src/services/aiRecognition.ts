@@ -14,8 +14,8 @@ export async function recognizeHoldingImage(
   config: AiConfig,
   imageDataUrls: string[],
 ): Promise<RecognizedHolding[]> {
-  if (!config.apiKey || !config.model) {
-    throw new Error('请先填写 AI API Key 和模型名称')
+  if (!config.baseURL.trim() || !config.apiKey.trim() || !config.model.trim()) {
+    throw new Error('请先完整填写 AI Base URL、API Key 和模型名称')
   }
   if (imageDataUrls.length === 0) {
     throw new Error('请先上传截图')
@@ -30,7 +30,7 @@ export async function recognizeHoldingImage(
     apiKey: config.apiKey,
     model: config.model,
     temperature: 0,
-    configuration: config.baseURL ? { baseURL: config.baseURL } : undefined,
+    configuration: { baseURL: config.baseURL.trim() },
   })
 
   const response = await model.invoke([

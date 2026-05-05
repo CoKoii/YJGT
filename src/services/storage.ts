@@ -1,28 +1,9 @@
-import type { AiChatMessage, AiConfig, BudgetConfig, Holding, HoldingOperation, ProfitSnapshot } from '@/types'
+import { AI_CHAT_STORAGE_KEY, DEFAULT_AI_CONFIG, DEFAULT_BUDGET, PORTFOLIO_SCHEMA_VERSION, STORAGE_KEY } from '@/constants/portfolio'
+import type { AiChatMessage, PortfolioState } from '@/types'
 
-const CONFIG_STORAGE_KEY = 'fund-follow-config'
-const FUND_DATA_STORAGE_KEY = 'fund-follow-fund-data'
-const AI_CHAT_STORAGE_KEY = 'fund-follow-ai-chat'
-
-export interface PersistedAppConfig {
-  budget: BudgetConfig
-  aiConfig: AiConfig
-}
-
-export interface PersistedFundData {
-  holdings: Holding[]
-  operations: HoldingOperation[]
-  history: ProfitSnapshot[]
-  updatedAt: string
-}
-
-export interface PersistedPortfolio {
-  budget: BudgetConfig
-  aiConfig: AiConfig
-  holdings: Holding[]
-  operations: HoldingOperation[]
-  history: ProfitSnapshot[]
-  updatedAt: string
+interface PersistedPortfolio {
+  version: number
+  payload: PortfolioState
 }
 
 function parseStorageItem<T>(key: string): T | null {
@@ -37,32 +18,34 @@ function parseStorageItem<T>(key: string): T | null {
   }
 }
 
-export function loadPortfolio(): PersistedPortfolio | null {
-  const appConfig = parseStorageItem<PersistedAppConfig>(CONFIG_STORAGE_KEY)
-  const fundData = parseStorageItem<PersistedFundData>(FUND_DATA_STORAGE_KEY)
-  if (!appConfig && !fundData) return null
-
+export function createEmptyPortfolioState(): PortfolioState {
   return {
-    budget: appConfig?.budget ?? { myBudget: 0, bloggerBudget: 0 },
-    aiConfig: appConfig?.aiConfig ?? { baseURL: '', apiKey: '', model: '' },
-    holdings: fundData?.holdings ?? [],
-    operations: fundData?.operations ?? [],
-    history: fundData?.history ?? [],
-    updatedAt: fundData?.updatedAt ?? '',
+    budget: { ...DEFAULT_BUDGET },
+    aiConfig: { ...DEFAULT_AI_CONFIG },
+    holdings: [],
+    operations: [],
+    history: [],
+    updatedAt: '',
   }
 }
 
-export function savePortfolio(data: PersistedPortfolio): void {
-  const appConfig: PersistedAppConfig = { budget: data.budget, aiConfig: data.aiConfig }
-  const fundData: PersistedFundData = {
-    holdings: data.holdings,
-    operations: data.operations,
-    history: data.history,
-    updatedAt: data.updatedAt,
+export function loadPortfolio(): PortfolioState {
+  const persisted = parseStorageItem<PersistedPortfolio>(STORAGE_KEY)
+
+  if (persisted?.version === PORTFOLIO_SCHEMA_VERSION) {
+    return persisted.payload
   }
 
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(appConfig))
-  localStorage.setItem(FUND_DATA_STORAGE_KEY, JSON.stringify(fundData))
+  return createEmptyPortfolioState()
+}
+
+export function savePortfolio(data: PortfolioState): void {
+  const payload: PersistedPortfolio = {
+    version: PORTFOLIO_SCHEMA_VERSION,
+    payload: data,
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
 }
 
 export function loadAiChatMessages(): AiChatMessage[] {

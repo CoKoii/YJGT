@@ -431,7 +431,7 @@ button {
 
 .side-stack {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 264px) minmax(0, 1fr);
   gap: 12px;
   height: 100%;
   min-height: 0;
@@ -442,9 +442,27 @@ button {
   min-height: 0;
 }
 
+.trend-card.ant-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.trend-card .ant-card-head {
+  flex-shrink: 0;
+}
+
+.trend-card .ant-card-body {
+  flex: 1 1 0;
+  min-height: 0;
+  padding-bottom: 10px;
+}
+
 .chart {
   width: 100%;
-  height: 288px;
+  height: 100%;
+  min-height: 180px;
 }
 
 .ai-chat-card {
@@ -516,12 +534,86 @@ button {
   color: #172554;
   font-size: 12px;
   line-height: 18px;
-  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .ai-chat-message.user .ai-chat-bubble {
   background: #2563ff;
   color: #fff;
+}
+
+.markdown-body :first-child {
+  margin-top: 0;
+}
+
+.markdown-body :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body pre,
+.markdown-body blockquote,
+.markdown-body table,
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 0 0 6px;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 18px;
+}
+
+.markdown-body li + li {
+  margin-top: 4px;
+}
+
+.markdown-body code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.markdown-body pre {
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body blockquote {
+  padding-left: 10px;
+  border-left: 3px solid rgba(148, 163, 184, 0.7);
+  color: #475569;
+}
+
+.markdown-body a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.ai-chat-message.user .markdown-body code {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.ai-chat-message.user .markdown-body pre {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ai-chat-message.user .markdown-body blockquote {
+  border-left-color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .ai-chat-input {
@@ -532,16 +624,38 @@ button {
   left: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: end;
-  min-height: 54px;
+  align-items: center;
+  min-height: 44px;
 }
 
-.ai-chat-input .ant-btn {
-  height: 54px;
+.ai-chat-textarea.ant-input {
+  border: 1px solid #d7dfeb;
+  border-radius: 8px;
+  height: 44px;
+  padding: 0 12px;
+  background: #fff;
+  color: #172554;
+  font-size: 13px;
+  line-height: 42px;
+  box-shadow: none;
 }
 
-.ai-chat-input textarea {
-  resize: none;
+.ai-chat-textarea.ant-input::placeholder {
+  color: #94a3b8;
+}
+
+.ai-chat-textarea.ant-input:focus,
+.ai-chat-textarea.ant-input:focus-within {
+  border-color: #91caff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 255, 0.08);
+}
+
+.ai-chat-send.ant-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  box-shadow: none;
 }
 
 .detail-chart {
@@ -695,16 +809,33 @@ button {
   width: 100%;
 }
 
+.ai-recognition-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  height: min(82vh, 760px);
+  min-height: 520px;
+}
+
 .ai-recognition-modal .ant-modal-body {
-  height: min(68vh, 620px);
-  min-height: 430px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   padding-top: 12px;
 }
 
+.ai-recognition-modal .ant-modal-footer {
+  flex-shrink: 0;
+}
+
 .ai-recognition-layout {
+  display: flex;
   height: 100%;
+  min-height: 0;
   align-items: stretch;
+}
+
+.ai-recognition-layout > .ant-col {
+  min-height: 0;
 }
 
 .ai-recognition-layout > .ant-col:last-child {
@@ -713,9 +844,16 @@ button {
   min-height: 0;
 }
 
-.ai-control-card {
+.ai-control-card,
+.ai-result-card {
   width: 100%;
   border: 1px solid #e3e8f2;
+}
+
+.ai-result-card {
+  display: flex;
+  height: 100%;
+  min-height: 0;
 }
 
 .ai-control-card .ant-card-body {
@@ -731,14 +869,6 @@ button {
 .ai-control-section {
   display: grid;
   gap: 10px;
-}
-
-.ai-result-card {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 1px solid #e3e8f2;
 }
 
 .ai-result-card .ant-card-body {
@@ -823,6 +953,12 @@ button {
 
 .ai-result-divider {
   margin: 12px 0;
+  flex-shrink: 0;
+}
+
+.recognized-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .recognized-table .ant-table {
@@ -1017,6 +1153,7 @@ button {
   }
 
   .ai-recognition-modal .ant-modal-body {
+    flex: none;
     height: auto;
     min-height: 0;
     overflow: visible;

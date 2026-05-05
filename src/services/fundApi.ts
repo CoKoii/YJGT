@@ -1,4 +1,4 @@
-import type { FundTrendPoint } from '@/types'
+import type { FundInfo, FundTrendPoint } from '@/types'
 
 interface EastMoneyFundInfoPayload {
   fundcode?: string
@@ -18,11 +18,6 @@ declare global {
     fS_code?: string
     Data_netWorthTrend?: Array<{ x: number; y: number }>
   }
-}
-
-export interface FundInfo {
-  code: string
-  name: string
 }
 
 interface ScoredFundInfo extends FundInfo {
