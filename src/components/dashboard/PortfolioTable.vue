@@ -163,7 +163,7 @@ defineEmits<{
             </div>
           </template>
         </vxe-column>
-        <vxe-column title="博主盈亏金额" align="right">
+        <vxe-column title="博主持有收益" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
               <span
@@ -181,7 +181,7 @@ defineEmits<{
             </div>
           </template>
         </vxe-column>
-        <vxe-column title="我的盈亏金额" align="right">
+        <vxe-column title="我的持有收益" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
               <span
