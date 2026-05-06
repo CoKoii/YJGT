@@ -465,6 +465,16 @@ button {
   gap: 6px;
 }
 
+.follow-trend-value.red,
+.target-arrow.red {
+  color: var(--danger);
+}
+
+.follow-trend-value.green,
+.target-arrow.green {
+  color: var(--success);
+}
+
 .target-arrow {
   font-size: 16px;
   line-height: 1;

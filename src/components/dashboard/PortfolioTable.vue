@@ -135,8 +135,16 @@ defineEmits<{
                 class="target-line"
                 :class="getFollowTrendClass(row.myInvested, row.targetInvested)"
               >
-                <span class="metric-main money-main">{{ formatNumber(row.myInvested) }}</span>
-                <span class="target-arrow">{{
+                <span
+                  class="metric-main money-main follow-trend-value"
+                  :class="getFollowTrendClass(row.myInvested, row.targetInvested)"
+                >
+                  {{ formatNumber(row.myInvested) }}
+                </span>
+                <span
+                  class="target-arrow"
+                  :class="getFollowTrendClass(row.myInvested, row.targetInvested)"
+                >{{
                   getFollowTrendIcon(row.myInvested, row.targetInvested)
                 }}</span>
               </div>
