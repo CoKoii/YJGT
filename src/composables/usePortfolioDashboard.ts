@@ -301,7 +301,7 @@ export function usePortfolioDashboard() {
         : 0
   }
 
-  function setConvertShare(owner: InvestorSide, shareRatio: number) {
+  function setOperationShare(owner: InvestorSide, shareRatio: number) {
     if (owner === 'blogger') {
       operationForm.bloggerShare = Number((operationForm.bloggerTotalShare * shareRatio).toFixed(2))
       operationForm.bloggerAmount = operationForm.bloggerShare
@@ -312,7 +312,7 @@ export function usePortfolioDashboard() {
     operationForm.myAmount = operationForm.myShare
   }
 
-  function syncConvertAmount(owner: InvestorSide) {
+  function syncOperationAmount(owner: InvestorSide) {
     if (owner === 'blogger') {
       operationForm.bloggerAmount = operationForm.bloggerShare
       return
@@ -331,9 +331,9 @@ export function usePortfolioDashboard() {
   }
 
   function saveOperation() {
-    if (operationForm.type === 'convert') {
-      syncConvertAmount('blogger')
-      syncConvertAmount('mine')
+    if (operationForm.type !== 'buy') {
+      syncOperationAmount('blogger')
+      syncOperationAmount('mine')
     }
 
     if (operationForm.bloggerAmount <= 0 && operationForm.myAmount <= 0) {
@@ -360,7 +360,7 @@ export function usePortfolioDashboard() {
           type: operationForm.type,
           amount: item.amount,
           share:
-            operationForm.type === 'convert'
+            operationForm.type !== 'buy'
               ? item.side === 'blogger'
                 ? operationForm.bloggerShare
                 : operationForm.myShare
@@ -651,8 +651,8 @@ export function usePortfolioDashboard() {
     saveOperation,
     saveSettings,
     sendAiChatMessage,
-    setConvertShare,
-    syncConvertAmount,
+    setOperationShare,
+    syncOperationAmount,
     syncMyOperationAmount,
   }
 }

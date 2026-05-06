@@ -36,6 +36,12 @@ const OperationModal = defineAsyncComponent(
 )
 const SettingsModal = defineAsyncComponent(() => import('@/components/dashboard/SettingsModal.vue'))
 
+const OPERATION_TITLES = {
+  buy: '买入',
+  sell: '卖出',
+  convert: '转换',
+} as const
+
 const {
   aiChatMessages,
   aiConfigForm,
@@ -76,7 +82,7 @@ const {
   settingsSection,
   shouldInvest,
   store,
-  syncConvertAmount,
+  syncOperationAmount,
   syncMyOperationAmount,
   todayProfit,
   uploadedFiles,
@@ -88,12 +94,11 @@ const {
   fillOperationTargetFundName,
   handleUploadChange,
   removeHolding,
-  setConvertShare,
+  setOperationShare,
 } = usePortfolioDashboard()
 
 function getOperationTitle() {
-  const actionText =
-    operationForm.type === 'buy' ? '新增买入' : operationForm.type === 'sell' ? '新增卖出' : '新增转换'
+  const actionText = OPERATION_TITLES[operationForm.type]
   return `${actionText}：${operationForm.fundName}（${operationForm.fundCode}）`
 }
 
@@ -236,8 +241,8 @@ function updateAiConfigForm(value: AiConfig) {
         @update:form="mergeState(operationForm, $event)"
         @save="saveOperation"
         @sync-my-amount="syncMyOperationAmount"
-        @set-share="setConvertShare"
-        @sync-convert-amount="syncConvertAmount"
+        @set-share="setOperationShare"
+        @sync-operation-amount="syncOperationAmount"
         @fill-target-name="fillOperationTargetFundName"
       />
 
