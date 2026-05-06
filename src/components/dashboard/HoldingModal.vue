@@ -125,7 +125,7 @@ const holdingSections = computed(() => [
 }
 
 .holding-form :deep(.ant-form-item-label > label) {
-  color: #172554;
+  color: var(--text-main);
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
@@ -151,13 +151,13 @@ const holdingSections = computed(() => [
   flex-direction: column;
   gap: 18px;
   padding: 18px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-base);
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface-elevated);
 }
 
 .holding-section-title {
-  color: #172554;
+  color: var(--text-main);
   font-size: 16px;
   font-weight: 700;
   line-height: 24px;

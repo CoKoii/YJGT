@@ -41,6 +41,10 @@ const detailTrend = ref<FundTrendPoint[]>([])
 const isTrendLoading = ref(false)
 let chart: echarts.ECharts | null = null
 
+function getChartColor(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
 const title = computed(() =>
   props.holding ? `${props.holding.fundName}（${props.holding.fundCode}）` : '基金详情',
 )
@@ -112,11 +116,11 @@ function renderChart() {
             show: true,
             formatter: ({ data }: { data?: { label?: string } }) => data?.label ?? '',
             position: 'right',
-            color: '#2563ff',
+            color: getChartColor('--brand'),
             fontWeight: 700,
           },
           data: myOperationData,
-          color: '#2563ff',
+          color: getChartColor('--brand'),
         },
         {
           name: '博主操作点',
@@ -143,14 +147,14 @@ function renderChart() {
           type: 'line',
           smooth: true,
           data: chartPoints.map((item) => item.value.toFixed(2)),
-          color: '#64748b',
+          color: getChartColor('--text-muted'),
         },
         {
           name: '我的收益率',
           type: 'line',
           smooth: true,
           data: buildRateSeriesData(chartPoints, holdingStartDate, myRate),
-          color: '#2563ff',
+          color: getChartColor('--brand'),
         },
         {
           name: '博主收益率',
@@ -167,7 +171,7 @@ function renderChart() {
           type: 'line',
           smooth: true,
           data: chartPoints.map((item) => item.value.toFixed(4)),
-          color: '#64748b',
+          color: getChartColor('--text-muted'),
         },
       ]
 
@@ -179,7 +183,7 @@ function renderChart() {
               text: isPerformanceMode ? '暂无走势数据' : '暂无净值数据',
               left: 'center',
               top: 'middle',
-              textStyle: { color: '#94a3b8', fontSize: 14, fontWeight: 400 },
+              textStyle: { color: getChartColor('--text-subtle'), fontSize: 14, fontWeight: 400 },
             }
           : undefined,
       tooltip: {
@@ -212,14 +216,27 @@ function renderChart() {
         type: 'category',
         data: chartPoints.map((item) => item.date),
         boundaryGap: false,
+        axisLine: { lineStyle: { color: getChartColor('--border-base') } },
         axisLabel: {
+          color: getChartColor('--text-muted'),
           hideOverlap: true,
           formatter: (value: string) => value.slice(5),
         },
       },
       yAxis: isPerformanceMode
-        ? { type: 'value', name: '收益率', axisLabel: { formatter: '{value}%' } }
-        : { type: 'value', name: '净值', scale: true },
+        ? {
+            type: 'value',
+            name: '收益率',
+            axisLabel: { formatter: '{value}%', color: getChartColor('--text-muted') },
+            splitLine: { lineStyle: { color: getChartColor('--border-soft') } },
+          }
+        : {
+            type: 'value',
+            name: '净值',
+            scale: true,
+            axisLabel: { color: getChartColor('--text-muted') },
+            splitLine: { lineStyle: { color: getChartColor('--border-soft') } },
+          },
       series,
     },
     true,
@@ -230,7 +247,9 @@ function renderChart() {
 watch(
   () => props.open,
   (open) => {
-    if (open) void loadDetailTrend()
+    if (open) {
+      void loadDetailTrend()
+    }
   },
 )
 watch(

@@ -114,7 +114,7 @@ watch(
               @change="$emit('upload-change', $event)"
             >
               <div class="upload-content">
-                <p class="ant-upload-drag-icon"><InboxOutlined /></p>
+                <p class="ant-upload-drag-icon"><InboxOutlined class="upload-icon" /></p>
                 <p class="ant-upload-text">拖入或选择持仓截图</p>
                 <p class="ant-upload-hint">支持多张连续截图，会自动识别基金、金额和收益</p>
               </div>
@@ -192,3 +192,15 @@ watch(
     </a-row>
   </a-modal>
 </template>
+
+<style scoped>
+.upload-icon {
+  color: var(--brand-contrast);
+}
+
+.upload-icon :deep(svg),
+.upload-icon :deep(path) {
+  fill: currentColor;
+  stroke: currentColor;
+}
+</style>

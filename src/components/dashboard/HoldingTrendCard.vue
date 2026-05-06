@@ -11,6 +11,10 @@ const range = ref<'month' | 'quarter'>('month')
 const chartRef = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 
+function getChartColor(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
 const chartHistory = computed(() => props.history.slice(range.value === 'month' ? -30 : -90))
 
 function renderChart() {
@@ -24,15 +28,21 @@ function renderChart() {
       type: 'category',
       data: chartHistory.value.map((item) => item.date.slice(5)),
       boundaryGap: false,
+      axisLine: { lineStyle: { color: getChartColor('--border-base') } },
+      axisLabel: { color: getChartColor('--text-muted') },
     },
-    yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
+    yAxis: {
+      type: 'value',
+      axisLabel: { formatter: '{value}%', color: getChartColor('--text-muted') },
+      splitLine: { lineStyle: { color: getChartColor('--border-soft') } },
+    },
     series: [
       {
         name: '我的收益率',
         type: 'line',
         smooth: true,
         data: chartHistory.value.map((item) => item.myProfitRate.toFixed(2)),
-        color: '#2563ff',
+        color: getChartColor('--brand'),
       },
       {
         name: '博主收益率',

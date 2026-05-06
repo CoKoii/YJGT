@@ -157,7 +157,7 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
 }
 
 .operation-form :deep(.ant-form-item-label > label) {
-  color: #172554;
+  color: var(--text-main);
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
@@ -187,16 +187,16 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
   min-height: 40px;
   padding: 0 12px;
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--surface-soft);
 }
 
 .operation-estimate-label {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
 .operation-estimate-value {
-  color: #0f172a;
+  color: var(--text-strong);
   font-size: 18px;
   font-weight: 600;
 }

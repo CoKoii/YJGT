@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
-import { BarChartOutlined, BulbOutlined, SettingOutlined } from '@ant-design/icons-vue'
+import { BarChartOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import OverviewPanel from '@/components/dashboard/OverviewPanel.vue'
 import PortfolioTable from '@/components/dashboard/PortfolioTable.vue'
 import { usePortfolioDashboard } from '@/composables/usePortfolioDashboard'
@@ -40,6 +40,30 @@ const OPERATION_TITLES = {
   buy: '买入',
   sell: '卖出',
   convert: '转换',
+} as const
+
+const antThemeConfig = {
+  token: {
+    colorPrimary: '#2563ff',
+    colorText: '#172554',
+    colorTextSecondary: '#64748b',
+    colorTextHeading: '#172554',
+    colorBgBase: '#f7f9fc',
+    colorBgContainer: '#ffffff',
+    colorBgElevated: '#ffffff',
+    colorBorder: '#e3e8f2',
+    colorBorderSecondary: '#edf1f7',
+    colorSplit: '#edf1f7',
+    colorFillSecondary: '#f8fafc',
+    borderRadius: 10,
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif',
+  },
+  components: {
+    Card: {
+      headerBg: 'transparent',
+    },
+  },
 } as const
 
 const {
@@ -121,18 +145,10 @@ function updateAiConfigForm(value: AiConfig) {
 
 <template>
   <a-config-provider
-    :theme="{
-      token: {
-        colorPrimary: '#2563ff',
-        borderRadius: 8,
-        colorText: '#172554',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif',
-      },
-    }"
+    :theme="antThemeConfig"
   >
-    <a-layout class="app-shell" style="background: #f7f9fc">
-      <a-layout-header class="page-header" style="background: transparent">
+    <a-layout class="app-shell">
+      <a-layout-header class="page-header">
         <a-row align="middle" justify="space-between" :wrap="false">
           <a-col>
             <a-space align="center" :size="12">
@@ -142,7 +158,6 @@ function updateAiConfigForm(value: AiConfig) {
           </a-col>
           <a-col>
             <a-space>
-              <a-button type="text" shape="circle"><BulbOutlined /></a-button>
               <a-button type="text" @click="openBudgetModal"><SettingOutlined />偏好设置</a-button>
             </a-space>
           </a-col>
