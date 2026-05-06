@@ -16,6 +16,17 @@ import type {
 } from '@/types'
 import { actualInvested, createHistoryDateKey, profitRate } from '@/utils/calculations'
 
+function findLatestNavDate(
+  items: Holding[],
+  field: 'myNavDate' | 'bloggerNavDate',
+): string {
+  return items.reduce((latest, item) => {
+    const date = item[field]
+    if (!date) return latest
+    return date > latest ? date : latest
+  }, '')
+}
+
 function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
   const latestByDate = new Map<string, ProfitSnapshot>()
   items.forEach((item) => latestByDate.set(item.date, item))
@@ -81,6 +92,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const updatedAt = ref(persisted.updatedAt)
 
   const totals = computed<PortfolioTotals>(() => {
+    const latestMyNavDate = findLatestNavDate(holdings.value, 'myNavDate')
+    const latestBloggerNavDate = findLatestNavDate(holdings.value, 'bloggerNavDate')
     const aggregate = {
       myAmount: 0,
       bloggerAmount: 0,
@@ -99,8 +112,12 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       aggregate.bloggerProfit += holding.bloggerProfit
       aggregate.myInvested += actualInvested(holding.myAmount, holding.myProfit)
       aggregate.bloggerInvested += actualInvested(holding.bloggerAmount, holding.bloggerProfit)
-      aggregate.myYesterdayProfit += holding.myYesterdayProfit
-      aggregate.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
+      if (holding.myNavDate === latestMyNavDate) {
+        aggregate.myYesterdayProfit += holding.myYesterdayProfit
+      }
+      if (holding.bloggerNavDate === latestBloggerNavDate) {
+        aggregate.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
+      }
     }
 
     return {
