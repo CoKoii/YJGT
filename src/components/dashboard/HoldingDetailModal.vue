@@ -19,7 +19,6 @@ import {
   filterTrendByRange,
   findNearestTrendPoint,
   getOperationLabel,
-  parseHoldingUpdatedDate,
   profitRate,
   toPerformanceTrend,
 } from '@/utils/calculations'
@@ -53,9 +52,7 @@ const relatedOperations = computed(() => {
   if (!props.holding) return []
   return props.operations.filter(
     (item) =>
-      item.fundCode === props.holding?.fundCode ||
-      item.fromFundCode === props.holding?.fundCode ||
-      item.toFundCode === props.holding?.fundCode,
+      item.fundCode === props.holding?.fundCode || item.toFundCode === props.holding?.fundCode,
   )
 })
 
@@ -80,25 +77,14 @@ function renderChart() {
   const chartPoints = isPerformanceMode ? toPerformanceTrend(trend) : trend
   const myRate = profitRate(props.holding.myAmount, props.holding.myProfit)
   const bloggerRate = profitRate(props.holding.bloggerAmount, props.holding.bloggerProfit)
-  const holdingStartDate = parseHoldingUpdatedDate(props.holding.updatedAt)
+  const holdingStartDate = props.holding.myNavDate || props.holding.bloggerNavDate || chartPoints[0]?.date || ''
 
-  const myOperationData = relatedOperations.value
-    .filter((item) => item.side === 'mine')
+  const operationData = relatedOperations.value
     .map((item) => {
-      const point = findNearestTrendPoint(chartPoints, parseHoldingUpdatedDate(item.date))
-      return point
-        ? { value: [point.date, Number(myRate.toFixed(2))], label: getOperationLabel(item.type) }
-        : null
-    })
-    .filter(Boolean)
-
-  const bloggerOperationData = relatedOperations.value
-    .filter((item) => item.side === 'blogger')
-    .map((item) => {
-      const point = findNearestTrendPoint(chartPoints, parseHoldingUpdatedDate(item.date))
+      const point = findNearestTrendPoint(chartPoints, item.tradeDate)
       return point
         ? {
-            value: [point.date, Number(bloggerRate.toFixed(2))],
+            value: [point.date, Number(Math.max(myRate, bloggerRate).toFixed(2))],
             label: getOperationLabel(item.type),
           }
         : null
@@ -108,7 +94,7 @@ function renderChart() {
   const operationSeries = isPerformanceMode
     ? [
         {
-          name: '我的操作点',
+          name: '操作点',
           type: 'scatter',
           symbolSize: 14,
           silent: true,
@@ -119,23 +105,8 @@ function renderChart() {
             color: getChartColor('--brand'),
             fontWeight: 700,
           },
-          data: myOperationData,
+          data: operationData,
           color: getChartColor('--brand'),
-        },
-        {
-          name: '博主操作点',
-          type: 'scatter',
-          symbolSize: 14,
-          silent: true,
-          label: {
-            show: true,
-            formatter: ({ data }: { data?: { label?: string } }) => data?.label ?? '',
-            position: 'right',
-            color: '#10a37f',
-            fontWeight: 700,
-          },
-          data: bloggerOperationData,
-          color: '#10a37f',
         },
       ]
     : []

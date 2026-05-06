@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type InvestorSide = 'mine' | 'blogger'
 export type OperationType = 'buy' | 'sell' | 'convert'
-export type OperationStatus = 'pending' | 'confirmed'
+export type OperationStatus = 'pending' | 'settled'
 export type OperationSource = 'manual' | 'ai'
 export type TrendRange = 'month' | 'quarter' | 'half' | 'year' | 'ytd' | 'all'
 export type DetailChartMode = 'performance' | 'netWorth'
@@ -22,9 +22,17 @@ export type Holding = {
   id: string
   fundName: string
   fundCode: string
+  myCost: number
+  myShares: number
+  myNav: number
+  myNavDate: string
   myAmount: number
   myProfit: number
   myYesterdayProfit: number
+  bloggerCost: number
+  bloggerShares: number
+  bloggerNav: number
+  bloggerNavDate: string
   bloggerAmount: number
   bloggerProfit: number
   bloggerYesterdayProfit: number
@@ -36,33 +44,31 @@ export type HoldingFormModel = HoldingDraft
 
 export type HoldingOperation = {
   id: string
-  side: InvestorSide
   type: OperationType
-  date: string
-  amount: number
+  submittedAt: string
+  tradeDate: string
   source: OperationSource
   status: OperationStatus
-  share?: number
-  fundCode?: string
-  fundName?: string
-  fromFundCode?: string
-  fromFundName?: string
+  fundCode: string
+  fundName: string
+  bloggerAmount: number
+  myAmount: number
   toFundCode?: string
   toFundName?: string
+  settledAt?: string
+  settledFundNav?: number
+  settledTargetNav?: number
 }
 
-export type HoldingOperationDraft = Omit<HoldingOperation, 'id' | 'date' | 'source' | 'status'>
+export type HoldingOperationDraft = Omit<
+  HoldingOperation,
+  'id' | 'submittedAt' | 'tradeDate' | 'source' | 'status'
+>
 
 export type OperationFormModel = {
   type: OperationType
   bloggerAmount: number
   myAmount: number
-  bloggerShare: number
-  myShare: number
-  bloggerTotalShare: number
-  myTotalShare: number
-  bloggerInvested: number
-  myInvested: number
   fundCode: string
   fundName: string
   toFundCode: string
@@ -139,5 +145,6 @@ export type HoldingRow = Holding & {
   bloggerRate: number
   myPositionRate: number
   bloggerPositionRate: number
+  latestNavDate: string
   pendingOperations: HoldingOperation[]
 }

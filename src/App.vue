@@ -12,7 +12,6 @@ import {
   formatPlainPercent,
   getFollowTrendClass,
   getFollowTrendIcon,
-  getInvestorSideText,
   getOperationActionText,
   getOperationLabel,
 } from '@/utils/calculations'
@@ -100,13 +99,11 @@ const {
   saveOperation,
   saveSettings,
   selectedHolding,
-  selectedOperation,
-  selectedOperationsBySide,
+  selectedOperations,
   sendAiChatMessage,
   settingsSection,
   shouldInvest,
   store,
-  syncOperationAmount,
   syncMyOperationAmount,
   todayProfit,
   uploadedFiles,
@@ -118,7 +115,7 @@ const {
   fillOperationTargetFundName,
   handleUploadChange,
   removeHolding,
-  setOperationShare,
+  setOperationAmountByRatio,
 } = usePortfolioDashboard()
 
 function getOperationTitle() {
@@ -256,19 +253,15 @@ function updateAiConfigForm(value: AiConfig) {
         @update:form="mergeState(operationForm, $event)"
         @save="saveOperation"
         @sync-my-amount="syncMyOperationAmount"
-        @set-share="setOperationShare"
-        @sync-operation-amount="syncOperationAmount"
+        @set-ratio="setOperationAmountByRatio"
         @fill-target-name="fillOperationTargetFundName"
       />
 
       <OperationDetailModal
         :open="isOperationDetailOpen"
-        :selected-operation="selectedOperation"
-        :selected-operations-by-side="selectedOperationsBySide"
+        :operations="selectedOperations"
         :format-money="formatMoney"
-        :format-number="formatNumber"
         :get-operation-action-text="getOperationActionText"
-        :get-investor-side-text="getInvestorSideText"
         @update:open="isOperationDetailOpen = $event"
         @revoke="revokeSelectedOperations"
       />

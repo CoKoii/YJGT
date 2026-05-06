@@ -5,7 +5,7 @@ import {
   FUND_CODE_PATTERN,
 } from '@/constants/portfolio'
 import { recognizeHoldingImage, streamPortfolioChat } from '@/services/ai'
-import { fetchFundInfo, searchFundByName } from '@/services/fund'
+import { fetchFundInfo, fetchFundNetWorthTrend, searchFundByName } from '@/services/fund'
 import { loadAiChatMessages, saveAiChatMessages } from '@/services/storage'
 import { usePortfolioStore } from '@/stores/portfolio'
 import type {
@@ -13,6 +13,7 @@ import type {
   Holding,
   HoldingFormModel,
   HoldingOperation,
+  HoldingRow,
   InvestorSide,
   OperationFormModel,
   RecognizedHolding,
@@ -22,12 +23,14 @@ import type {
 } from '@/types'
 import {
   actualInvested,
+  buildOperationFundCodes,
   clampPercent,
   csvEscape,
   followRatio,
   profitRate,
 } from '@/utils/calculations'
 import { downloadText, readImageDataUrl } from '@/utils/file'
+import { syncPortfolioLedger } from '@/utils/portfolioLedger'
 import { message, Modal } from 'ant-design-vue'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 
@@ -36,12 +39,6 @@ function createOperationForm(): OperationFormModel {
     type: 'buy',
     bloggerAmount: 0,
     myAmount: 0,
-    bloggerShare: 0,
-    myShare: 0,
-    bloggerTotalShare: 0,
-    myTotalShare: 0,
-    bloggerInvested: 0,
-    myInvested: 0,
     fundCode: '',
     fundName: '',
     toFundCode: '',
@@ -60,11 +57,13 @@ export function usePortfolioDashboard() {
   const isOperationDetailOpen = ref(false)
   const selectedHoldingId = ref<string | null>(null)
   const selectedOperations = ref<HoldingOperation[]>([])
+  const selectedOperationHolding = ref<HoldingRow | null>(null)
   const settingsSection = ref<SettingsSection>(DEFAULT_SETTINGS_SECTION)
   const isRecognizing = ref(false)
   const isPreparingUploads = ref(false)
   const isChatStreaming = ref(false)
   const isFundInfoLoading = ref(false)
+  const isSyncingNetWorth = ref(false)
   const uploadedFiles = ref<UploadedFileMeta[]>([])
   const uploadedImageDataUrls = ref<Record<string, string>>({})
   const recognizedRows = ref<RecognizedHolding[]>([])
@@ -99,15 +98,10 @@ export function usePortfolioDashboard() {
         : 0,
   }))
 
-  const todayProfit = computed(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    const previousSnapshot = [...store.history].reverse().find((item) => item.date < today)
-
-    return {
-      mine: previousSnapshot ? store.totals.myProfit - previousSnapshot.myProfit : 0,
-      blogger: previousSnapshot ? store.totals.bloggerProfit - previousSnapshot.bloggerProfit : 0,
-    }
-  })
+  const todayProfit = computed(() => ({
+    mine: store.totals.myYesterdayProfit,
+    blogger: store.totals.bloggerYesterdayProfit,
+  }))
 
   const pendingOperationsByFundCode = computed(() => {
     const operationsByFundCode = new Map<string, HoldingOperation[]>()
@@ -115,19 +109,17 @@ export function usePortfolioDashboard() {
     store.operations
       .filter((operation) => operation.status === 'pending')
       .forEach((operation) => {
-        ;[operation.fundCode, operation.fromFundCode, operation.toFundCode]
-          .filter((fundCode): fundCode is string => Boolean(fundCode))
-          .forEach((fundCode) => {
-            const list = operationsByFundCode.get(fundCode) ?? []
-            list.push(operation)
-            operationsByFundCode.set(fundCode, list)
-          })
+        buildOperationFundCodes(operation).forEach((fundCode) => {
+          const list = operationsByFundCode.get(fundCode) ?? []
+          list.push(operation)
+          operationsByFundCode.set(fundCode, list)
+        })
       })
 
     return operationsByFundCode
   })
 
-  const holdingRows = computed(() =>
+  const holdingRows = computed<HoldingRow[]>(() =>
     store.holdings.map((holding) => {
       const myInvested = actualInvested(holding.myAmount, holding.myProfit)
       const bloggerInvested = actualInvested(holding.bloggerAmount, holding.bloggerProfit)
@@ -146,6 +138,7 @@ export function usePortfolioDashboard() {
           store.totals.bloggerInvested > 0
             ? (bloggerInvested / store.totals.bloggerInvested) * 100
             : 0,
+        latestNavDate: holding.myNavDate || holding.bloggerNavDate,
         pendingOperations: pendingOperationsByFundCode.value.get(holding.fundCode) ?? [],
       }
     }),
@@ -161,57 +154,81 @@ export function usePortfolioDashboard() {
     ),
   )
 
-  const selectedOperation = computed(() => selectedOperations.value[0] ?? null)
-  const selectedOperationsBySide = computed(() => ({
-    blogger: selectedOperations.value.find((operation) => operation.side === 'blogger'),
-    mine: selectedOperations.value.find((operation) => operation.side === 'mine'),
-  }))
-
-  function buildPortfolioContext(): string {
-    return JSON.stringify(
-      {
-        budget: store.budget,
-        totals: store.totals,
-        followRatio: ratio.value,
-        holdings: holdingRows.value.map((item) => ({
+  function buildPortfolioSnapshot() {
+    return {
+      budget: store.budget,
+      totals: store.totals,
+      followRatio: ratio.value,
+      holdings: holdingRows.value.map((item) => ({
+        fundName: item.fundName,
+        fundCode: item.fundCode,
+        navDate: item.latestNavDate,
+        targetInvested: item.targetInvested,
+        pendingOperations: item.pendingOperations.length,
+        raw: {
+          id: item.id,
           fundName: item.fundName,
           fundCode: item.fundCode,
-          my: {
-            amount: item.myAmount,
-            profit: item.myProfit,
-            profitRate: item.myRate,
-            invested: item.myInvested,
-            positionRate: item.myPositionRate,
-            yesterdayProfit: item.myYesterdayProfit,
-          },
-          blogger: {
-            amount: item.bloggerAmount,
-            profit: item.bloggerProfit,
-            profitRate: item.bloggerRate,
-            invested: item.bloggerInvested,
-            positionRate: item.bloggerPositionRate,
-            yesterdayProfit: item.bloggerYesterdayProfit,
-          },
-          targetInvested: item.targetInvested,
+          myCost: item.myCost,
+          myShares: item.myShares,
+          myNav: item.myNav,
+          myNavDate: item.myNavDate,
+          myAmount: item.myAmount,
+          myProfit: item.myProfit,
+          myYesterdayProfit: item.myYesterdayProfit,
+          bloggerCost: item.bloggerCost,
+          bloggerShares: item.bloggerShares,
+          bloggerNav: item.bloggerNav,
+          bloggerNavDate: item.bloggerNavDate,
+          bloggerAmount: item.bloggerAmount,
+          bloggerProfit: item.bloggerProfit,
+          bloggerYesterdayProfit: item.bloggerYesterdayProfit,
           updatedAt: item.updatedAt,
-        })),
-        operations: store.operations.map((item) => ({
-          side: item.side,
-          type: item.type,
-          date: item.date,
-          amount: item.amount,
-          fundCode: item.fundCode,
-          fundName: item.fundName,
-          fromFundCode: item.fromFundCode,
-          fromFundName: item.fromFundName,
-          toFundCode: item.toFundCode,
-          toFundName: item.toFundName,
-          source: item.source,
-        })),
-      },
-      null,
-      2,
-    )
+        },
+        derived: {
+          myInvested: item.myInvested,
+          bloggerInvested: item.bloggerInvested,
+          myRate: item.myRate,
+          bloggerRate: item.bloggerRate,
+          myPositionRate: item.myPositionRate,
+          bloggerPositionRate: item.bloggerPositionRate,
+        },
+      })),
+      operations: store.operations.map((item) => ({ ...item })),
+    }
+  }
+
+  async function syncPortfolioWithNetWorth(showResult = false) {
+    const fundCodes = [...new Set(store.operations.flatMap(buildOperationFundCodes).concat(store.holdings.map((item) => item.fundCode)))]
+      .filter((fundCode) => FUND_CODE_PATTERN.test(fundCode))
+
+    if (fundCodes.length === 0 || isSyncingNetWorth.value) return
+
+    isSyncingNetWorth.value = true
+    try {
+      const trendList = await Promise.all(fundCodes.map((fundCode) => fetchFundNetWorthTrend(fundCode)))
+      const trends = new Map<string, Awaited<ReturnType<typeof fetchFundNetWorthTrend>>>(
+        fundCodes.map((fundCode, index) => [fundCode, trendList[index] ?? []]),
+      )
+      const { holdings, operations } = syncPortfolioLedger(store.holdings, store.operations, trends)
+
+      const nextSerialized = JSON.stringify({ holdings, operations })
+      const currentSerialized = JSON.stringify({ holdings: store.holdings, operations: store.operations })
+      if (nextSerialized !== currentSerialized) {
+        const settledCount = operations.filter((item) => item.status === 'settled').length -
+          store.operations.filter((item) => item.status === 'settled').length
+        store.setSyncedPortfolio(holdings, operations)
+        if (showResult && settledCount > 0) {
+          message.success(`已按最新净值结算 ${settledCount} 条操作`)
+        }
+      }
+    } catch (error) {
+      if (showResult) {
+        message.error(error instanceof Error ? error.message : '净值同步失败')
+      }
+    } finally {
+      isSyncingNetWorth.value = false
+    }
   }
 
   function openBudgetModal() {
@@ -238,7 +255,7 @@ export function usePortfolioDashboard() {
     isHoldingModalOpen.value = true
   }
 
-  function saveHolding() {
+  async function saveHolding() {
     if (!holdingForm.fundName.trim() || !FUND_CODE_PATTERN.test(holdingForm.fundCode.trim())) {
       message.warning('请填写基金名称和 6 位基金代码')
       return
@@ -248,8 +265,17 @@ export function usePortfolioDashboard() {
       ...holdingForm,
       fundName: holdingForm.fundName.trim(),
       fundCode: holdingForm.fundCode.trim(),
+      myCost: 0,
+      myShares: 0,
+      myNav: 0,
+      myNavDate: '',
+      bloggerCost: 0,
+      bloggerShares: 0,
+      bloggerNav: 0,
+      bloggerNavDate: '',
     })
     isHoldingModalOpen.value = false
+    await syncPortfolioWithNetWorth()
     message.success('持仓已更新')
   }
 
@@ -273,16 +299,10 @@ export function usePortfolioDashboard() {
     }
   }
 
-  function openOperationModal(record: Holding, type: OperationFormModel['type']) {
-    const bloggerInvested = actualInvested(record.bloggerAmount, record.bloggerProfit)
-    const myInvested = actualInvested(record.myAmount, record.myProfit)
-
+  function openOperationModal(record: HoldingRow, type: OperationFormModel['type']) {
+    selectedOperationHolding.value = record
     Object.assign(operationForm, createOperationForm(), {
       type,
-      bloggerTotalShare: bloggerInvested,
-      myTotalShare: myInvested,
-      bloggerInvested,
-      myInvested,
       fundCode: record.fundCode,
       fundName: record.fundName,
     })
@@ -301,24 +321,18 @@ export function usePortfolioDashboard() {
         : 0
   }
 
-  function setOperationShare(owner: InvestorSide, shareRatio: number) {
+  function setOperationAmountByRatio(owner: InvestorSide, amountRatio: number) {
+    const baseHolding = selectedOperationHolding.value
+    if (!baseHolding) return
+
+    const baseAmount = owner === 'blogger' ? baseHolding.bloggerAmount : baseHolding.myAmount
+    const nextAmount = Number((baseAmount * amountRatio).toFixed(2))
     if (owner === 'blogger') {
-      operationForm.bloggerShare = Number((operationForm.bloggerTotalShare * shareRatio).toFixed(2))
-      operationForm.bloggerAmount = operationForm.bloggerShare
+      operationForm.bloggerAmount = nextAmount
       return
     }
 
-    operationForm.myShare = Number((operationForm.myTotalShare * shareRatio).toFixed(2))
-    operationForm.myAmount = operationForm.myShare
-  }
-
-  function syncOperationAmount(owner: InvestorSide) {
-    if (owner === 'blogger') {
-      operationForm.bloggerAmount = operationForm.bloggerShare
-      return
-    }
-
-    operationForm.myAmount = operationForm.myShare
+    operationForm.myAmount = nextAmount
   }
 
   async function fillOperationTargetFundName() {
@@ -330,12 +344,7 @@ export function usePortfolioDashboard() {
     operationForm.toFundName = fundInfo?.name ?? operationForm.toFundName
   }
 
-  function saveOperation() {
-    if (operationForm.type !== 'buy') {
-      syncOperationAmount('blogger')
-      syncOperationAmount('mine')
-    }
-
+  async function saveOperation() {
     if (operationForm.bloggerAmount <= 0 && operationForm.myAmount <= 0) {
       message.warning('请填写博主金额或我的金额')
       return
@@ -349,52 +358,47 @@ export function usePortfolioDashboard() {
       return
     }
 
-    store.recordOperations(
-      [
-        { side: 'blogger' as const, amount: operationForm.bloggerAmount },
-        { side: 'mine' as const, amount: operationForm.myAmount },
-      ]
-        .filter((item) => item.amount > 0)
-        .map((item) => ({
-          side: item.side,
-          type: operationForm.type,
-          amount: item.amount,
-          share:
-            operationForm.type !== 'buy'
-              ? item.side === 'blogger'
-                ? operationForm.bloggerShare
-                : operationForm.myShare
-              : undefined,
-          fundCode: operationForm.type === 'convert' ? undefined : operationForm.fundCode,
-          fundName: operationForm.type === 'convert' ? undefined : operationForm.fundName,
-          fromFundCode: operationForm.type === 'convert' ? operationForm.fundCode : undefined,
-          fromFundName: operationForm.type === 'convert' ? operationForm.fundName : undefined,
-          toFundCode:
-            operationForm.type === 'convert' ? operationForm.toFundCode.trim() : undefined,
-          toFundName:
-            operationForm.type === 'convert' ? operationForm.toFundName.trim() : undefined,
-        })),
-    )
+    if (operationForm.type !== 'buy' && selectedOperationHolding.value) {
+      if (operationForm.bloggerAmount > selectedOperationHolding.value.bloggerAmount + 0.01) {
+        message.warning('博主操作金额不能超过当前持有金额')
+        return
+      }
+      if (operationForm.myAmount > selectedOperationHolding.value.myAmount + 0.01) {
+        message.warning('我的操作金额不能超过当前持有金额')
+        return
+      }
+    }
+
+    store.recordOperation({
+      type: operationForm.type,
+      fundCode: operationForm.fundCode,
+      fundName: operationForm.fundName,
+      bloggerAmount: operationForm.bloggerAmount,
+      myAmount: operationForm.myAmount,
+      toFundCode: operationForm.type === 'convert' ? operationForm.toFundCode.trim() : undefined,
+      toFundName: operationForm.type === 'convert' ? operationForm.toFundName.trim() : undefined,
+    })
 
     isOperationModalOpen.value = false
+    await syncPortfolioWithNetWorth(true)
     message.success('操作已保存')
   }
 
   function openOperationDetail(operations: HoldingOperation[]) {
     selectedOperations.value = operations
-    isOperationDetailOpen.value = true
+    isOperationDetailOpen.value = operations.length > 0
   }
 
-  function revokeSelectedOperations() {
+  function revokeSelectedOperations(id: string) {
     Modal.confirm({
       title: '删除操作记录',
       content: '确认删除这条操作记录吗？删除后将无法恢复。',
       okText: '删除',
       cancelText: '再想想',
       onOk: () => {
-        store.removeOperations(selectedOperations.value.map((operation) => operation.id))
-        selectedOperations.value = []
-        isOperationDetailOpen.value = false
+        store.removeOperation(id)
+        selectedOperations.value = selectedOperations.value.filter((item) => item.id !== id)
+        isOperationDetailOpen.value = selectedOperations.value.length > 0
         message.success('操作记录已删除')
       },
     })
@@ -489,7 +493,7 @@ export function usePortfolioDashboard() {
     }
   }
 
-  function applyRecognized() {
+  async function applyRecognized() {
     const validRows = recognizedRows.value.filter((row) => FUND_CODE_PATTERN.test(row.fundCode))
     if (validRows.length === 0) {
       message.warning('当前没有可写入的有效识别结果')
@@ -499,6 +503,7 @@ export function usePortfolioDashboard() {
     store.applyRecognizedHoldings(aiSide.value, validRows)
     resetAiRecognition()
     isAiModalOpen.value = false
+    await syncPortfolioWithNetWorth()
     message.success(`已导入 ${validRows.length} 条持仓`)
   }
 
@@ -526,7 +531,7 @@ export function usePortfolioDashboard() {
       await streamPortfolioChat({
         config: store.aiConfig,
         messages: aiChatMessages.value.filter((item) => item.id !== assistantMessage.id),
-        portfolioContext: buildPortfolioContext(),
+        portfolioSnapshot: buildPortfolioSnapshot(),
         onDelta: (delta) => {
           assistantMessage.content += delta
           aiChatMessages.value = aiChatMessages.value.map((item) =>
@@ -557,6 +562,7 @@ export function usePortfolioDashboard() {
     const header = [
       '基金名称',
       '基金代码',
+      '最新净值日期',
       '我的持有金额',
       '我的持有收益',
       '博主持有金额',
@@ -568,6 +574,7 @@ export function usePortfolioDashboard() {
       [
         item.fundName,
         item.fundCode,
+        item.latestNavDate,
         item.myAmount,
         item.myProfit,
         item.bloggerAmount,
@@ -598,6 +605,8 @@ export function usePortfolioDashboard() {
     selectedHoldingId.value = store.holdings[0]?.id ?? null
   }
 
+  void syncPortfolioWithNetWorth()
+
   return {
     store,
     aiChatMessages,
@@ -623,9 +632,7 @@ export function usePortfolioDashboard() {
     recognizedSummary,
     selectedHolding,
     selectedHoldingId,
-    selectedOperation,
     selectedOperations,
-    selectedOperationsBySide,
     settingsSection,
     shouldInvest,
     todayProfit,
@@ -644,15 +651,13 @@ export function usePortfolioDashboard() {
     openOperationDetail,
     openOperationModal,
     removeHolding,
-    resetAiRecognition,
     revokeSelectedOperations,
     runRecognition,
     saveHolding,
     saveOperation,
     saveSettings,
     sendAiChatMessage,
-    setOperationShare,
-    syncOperationAmount,
+    setOperationAmountByRatio,
     syncMyOperationAmount,
   }
 }

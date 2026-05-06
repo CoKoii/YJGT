@@ -163,7 +163,7 @@ export function createHistoryDateKey() {
 }
 
 export function buildOperationFundCodes(operation: HoldingOperation): string[] {
-  return [operation.fundCode, operation.fromFundCode, operation.toFundCode].filter(
+  return [operation.fundCode, operation.toFundCode].filter(
     (fundCode): fundCode is string => Boolean(fundCode),
   )
 }

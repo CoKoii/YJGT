@@ -45,11 +45,11 @@ defineEmits<{
       <template #buttons>
         <div class="portfolio-summary">
           <span class="portfolio-title">持仓列表</span>
-          <span class="summary-label">我的今日收益</span>
+          <span class="summary-label">我的最新收益</span>
           <span :class="todayProfit.mine >= 0 ? 'red' : 'green'">{{
             formatMoney(todayProfit.mine)
           }}</span>
-          <span class="summary-label">博主今日收益</span>
+          <span class="summary-label">博主最新收益</span>
           <span :class="todayProfit.blogger >= 0 ? 'red' : 'green'">{{
             formatMoney(todayProfit.blogger)
           }}</span>

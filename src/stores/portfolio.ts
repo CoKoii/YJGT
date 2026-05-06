@@ -9,7 +9,6 @@ import type {
   HoldingDraft,
   HoldingOperation,
   HoldingOperationDraft,
-  InvestorSide,
   PortfolioState,
   PortfolioTotals,
   ProfitSnapshot,
@@ -23,18 +22,22 @@ function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
   return [...latestByDate.values()].slice(-HISTORY_LIMIT)
 }
 
-function createHoldingFromRecognition(
-  side: InvestorSide,
-  data: RecognizedHolding,
-  existing?: Holding,
-): Holding {
+function createHoldingFromRecognition(side: 'mine' | 'blogger', data: RecognizedHolding, existing?: Holding): Holding {
   const base: Holding = existing ?? {
     id: crypto.randomUUID(),
     fundName: data.fundName,
     fundCode: data.fundCode,
+    myCost: 0,
+    myShares: 0,
+    myNav: 0,
+    myNavDate: '',
     myAmount: 0,
     myProfit: 0,
     myYesterdayProfit: 0,
+    bloggerCost: 0,
+    bloggerShares: 0,
+    bloggerNav: 0,
+    bloggerNavDate: '',
     bloggerAmount: 0,
     bloggerProfit: 0,
     bloggerYesterdayProfit: 0,
@@ -46,15 +49,25 @@ function createHoldingFromRecognition(
         ...base,
         fundName: data.fundName,
         fundCode: data.fundCode,
+        myCost: 0,
+        myShares: 0,
+        myNav: 0,
+        myNavDate: '',
         myAmount: data.amount,
         myProfit: data.profit,
+        myYesterdayProfit: 0,
       }
     : {
         ...base,
         fundName: data.fundName,
         fundCode: data.fundCode,
+        bloggerCost: 0,
+        bloggerShares: 0,
+        bloggerNav: 0,
+        bloggerNavDate: '',
         bloggerAmount: data.amount,
         bloggerProfit: data.profit,
+        bloggerYesterdayProfit: 0,
       }
 }
 
@@ -155,30 +168,30 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     touch()
   }
 
-  function recordOperations(
-    payloads: HoldingOperationDraft[],
+  function recordOperation(
+    payload: HoldingOperationDraft,
     source: HoldingOperation['source'] = 'manual',
   ) {
     const timestamp = new Date().toISOString()
-    const nextOperations = payloads.map<HoldingOperation>((payload) => ({
+    const nextOperation: HoldingOperation = {
       ...payload,
       id: crypto.randomUUID(),
-      date: timestamp,
+      submittedAt: timestamp,
+      tradeDate: createHistoryDateKey(),
       source,
       status: 'pending',
-    }))
+    }
 
-    operations.value = [...operations.value, ...nextOperations].slice(-OPERATION_LIMIT)
+    operations.value = [...operations.value, nextOperation].slice(-OPERATION_LIMIT)
     touch()
   }
 
-  function removeOperations(ids: string[]) {
-    const idSet = new Set(ids)
-    operations.value = operations.value.filter((item) => !idSet.has(item.id))
+  function removeOperation(id: string) {
+    operations.value = operations.value.filter((item) => item.id !== id)
     touch()
   }
 
-  function applyRecognizedHoldings(side: InvestorSide, rows: RecognizedHolding[]) {
+  function applyRecognizedHoldings(side: 'mine' | 'blogger', rows: RecognizedHolding[]) {
     const nextHoldings = [...holdings.value]
 
     rows.forEach((row) => {
@@ -194,6 +207,12 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     })
 
     holdings.value = nextHoldings
+    touch()
+  }
+
+  function setSyncedPortfolio(nextHoldings: Holding[], nextOperations: HoldingOperation[]) {
+    holdings.value = nextHoldings
+    operations.value = nextOperations
     touch()
   }
 
@@ -229,9 +248,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     setAiConfig,
     upsertHolding,
     removeHolding,
-    recordOperations,
-    removeOperations,
+    recordOperation,
+    removeOperation,
     applyRecognizedHoldings,
+    setSyncedPortfolio,
     exportJson,
     resetPortfolio,
   }

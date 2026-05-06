@@ -14,12 +14,11 @@ const emit = defineEmits<{
   (event: 'update:form', value: OperationFormModel): void
   (event: 'save'): void
   (event: 'sync-my-amount'): void
-  (event: 'set-share', owner: InvestorSide, ratio: number): void
-  (event: 'sync-operation-amount', owner: InvestorSide): void
+  (event: 'set-ratio', owner: InvestorSide, ratio: number): void
   (event: 'fill-target-name'): void
 }>()
 
-const SHARE_RATIOS = [
+const AMOUNT_RATIOS = [
   { label: '1/4', value: 1 / 4 },
   { label: '1/3', value: 1 / 3 },
   { label: '1/2', value: 1 / 2 },
@@ -31,25 +30,21 @@ const amountFields = [
   { key: 'mine', label: '我的金额', formKey: 'myAmount' as const },
 ]
 
-const shareFields = computed(() => {
+const amountFieldsForExit = computed(() => {
   const actionText = props.form.type === 'sell' ? '卖出' : '转出'
 
   return [
     {
       key: 'blogger',
       owner: 'blogger' as const,
-      label: `博主${actionText}份额`,
-      totalShare: props.form.bloggerTotalShare,
-      share: props.form.bloggerShare,
-      formKey: 'bloggerShare' as const,
+      label: `博主${actionText}金额`,
+      formKey: 'bloggerAmount' as const,
     },
     {
       key: 'mine',
       owner: 'mine' as const,
-      label: `我的${actionText}份额`,
-      totalShare: props.form.myTotalShare,
-      share: props.form.myShare,
-      formKey: 'myShare' as const,
+      label: `我的${actionText}金额`,
+      formKey: 'myAmount' as const,
     },
   ]
 })
@@ -89,31 +84,22 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
           </a-col>
         </template>
         <template v-if="props.form.type !== 'buy'">
-          <a-col v-for="item in shareFields" :key="item.key" :span="12">
+          <a-col v-for="item in amountFieldsForExit" :key="item.key" :span="12">
             <a-form-item :label="item.label" class="operation-field">
               <div class="operation-share-panel">
-                <div class="operation-estimate">
-                  <span class="operation-estimate-label">当前总份额</span>
-                  <span class="operation-estimate-value">{{ props.formatNumber(item.totalShare) }}</span>
-                </div>
                 <a-space wrap class="operation-share-actions">
-                  <a-button
-                    v-for="ratio in SHARE_RATIOS"
-                    :key="ratio.label"
-                    @click="emit('set-share', item.owner, ratio.value)"
-                  >
+                  <a-button v-for="ratio in AMOUNT_RATIOS" :key="ratio.label" @click="emit('set-ratio', item.owner, ratio.value)">
                     {{ ratio.label }}
                   </a-button>
                 </a-space>
                 <a-input-number
-                  :value="item.share"
+                  :value="props.form[item.formKey]"
                   :min="0"
-                  :max="item.totalShare"
                   :precision="2"
-                  placeholder="手动输入份额"
+                  addon-before="¥"
+                  placeholder="手动输入金额"
                   class="operation-share-input"
                   @update:value="updateFormField(item.formKey, Number($event ?? 0))"
-                  @change="emit('sync-operation-amount', item.owner)"
                 />
               </div>
             </a-form-item>
