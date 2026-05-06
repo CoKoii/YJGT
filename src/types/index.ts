@@ -145,6 +145,8 @@ export type HoldingRow = Holding & {
   bloggerRate: number
   myPositionRate: number
   bloggerPositionRate: number
+  myDailyProfit: number | null
+  bloggerDailyProfit: number | null
   latestNavDate: string
   pendingOperations: HoldingOperation[]
 }

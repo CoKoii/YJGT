@@ -29,6 +29,7 @@ import {
   followRatio,
   profitRate,
 } from '@/utils/calculations'
+import { formatDateKey } from '@/utils/date'
 import { downloadText, readImageDataUrl } from '@/utils/file'
 import { syncPortfolioLedger } from '@/utils/portfolioLedger'
 import { message, Modal } from 'ant-design-vue'
@@ -75,6 +76,8 @@ export function usePortfolioDashboard() {
   const budgetForm = reactive({ ...store.budget })
   const aiConfigForm = reactive({ ...store.aiConfig })
 
+  const todayDateKey = formatDateKey(new Date())
+
   const selectedHolding = computed(() => {
     return (
       store.holdings.find((item) => item.id === selectedHoldingId.value) ??
@@ -98,11 +101,6 @@ export function usePortfolioDashboard() {
         : 0,
   }))
 
-  const todayProfit = computed(() => ({
-    mine: store.totals.myYesterdayProfit,
-    blogger: store.totals.bloggerYesterdayProfit,
-  }))
-
   const pendingOperationsByFundCode = computed(() => {
     const operationsByFundCode = new Map<string, HoldingOperation[]>()
 
@@ -124,6 +122,9 @@ export function usePortfolioDashboard() {
       const myInvested = actualInvested(holding.myAmount, holding.myProfit)
       const bloggerInvested = actualInvested(holding.bloggerAmount, holding.bloggerProfit)
       const targetInvested = ratio.value.blogger > 0 ? bloggerInvested / ratio.value.blogger : 0
+      const myDailyProfit = holding.myNavDate === todayDateKey ? holding.myYesterdayProfit : null
+      const bloggerDailyProfit =
+        holding.bloggerNavDate === todayDateKey ? holding.bloggerYesterdayProfit : null
 
       return {
         ...holding,
@@ -138,10 +139,27 @@ export function usePortfolioDashboard() {
           store.totals.bloggerInvested > 0
             ? (bloggerInvested / store.totals.bloggerInvested) * 100
             : 0,
+        myDailyProfit,
+        bloggerDailyProfit,
         latestNavDate: holding.myNavDate || holding.bloggerNavDate,
         pendingOperations: pendingOperationsByFundCode.value.get(holding.fundCode) ?? [],
       }
     }),
+  )
+
+  const todayProfit = computed(() =>
+    holdingRows.value.reduce(
+      (summary, row) => {
+        if (row.myDailyProfit !== null) {
+          summary.mine = (summary.mine ?? 0) + row.myDailyProfit
+        }
+        if (row.bloggerDailyProfit !== null) {
+          summary.blogger = (summary.blogger ?? 0) + row.bloggerDailyProfit
+        }
+        return summary
+      },
+      { mine: null as number | null, blogger: null as number | null },
+    ),
   )
 
   const recognizedSummary = computed(() =>

@@ -11,7 +11,7 @@ import {
 
 defineProps<{
   rows: HoldingRow[]
-  todayProfit: { mine: number; blogger: number }
+  todayProfit: { mine: number | null; blogger: number | null }
   totals: {
     myProfit: number
     bloggerProfit: number
@@ -37,6 +37,18 @@ defineEmits<{
   (event: 'edit', row: HoldingRow): void
   (event: 'remove', row: HoldingRow): void
 }>()
+
+function getProfitClass(value: number): 'red' | 'green' {
+  return value >= 0 ? 'red' : 'green'
+}
+
+function formatDailyProfit(formatMoney: (value: number) => string, value: number | null): string {
+  return value === null ? '--' : formatMoney(value)
+}
+
+function getOptionalProfitClass(value: number | null): 'red' | 'green' | '' {
+  return value === null ? '' : getProfitClass(value)
+}
 </script>
 
 <template>
@@ -45,20 +57,20 @@ defineEmits<{
       <template #buttons>
         <div class="portfolio-summary">
           <span class="portfolio-title">持仓列表</span>
-          <span class="summary-label">我的最新收益</span>
-          <span :class="todayProfit.mine >= 0 ? 'red' : 'green'">{{
-            formatMoney(todayProfit.mine)
+          <span class="summary-label">我的当日收益</span>
+          <span :class="getOptionalProfitClass(todayProfit.mine)">{{
+            formatDailyProfit(formatMoney, todayProfit.mine)
           }}</span>
-          <span class="summary-label">博主最新收益</span>
-          <span :class="todayProfit.blogger >= 0 ? 'red' : 'green'">{{
-            formatMoney(todayProfit.blogger)
+          <span class="summary-label">博主当日收益</span>
+          <span :class="getOptionalProfitClass(todayProfit.blogger)">{{
+            formatDailyProfit(formatMoney, todayProfit.blogger)
           }}</span>
           <span class="summary-label">我的总收益</span>
-          <span :class="totals.myProfit >= 0 ? 'red' : 'green'">
+          <span :class="getProfitClass(totals.myProfit)">
             {{ formatMoney(totals.myProfit) }}（{{ formatPercent(totals.myProfitRate) }}）
           </span>
           <span class="summary-label">博主总收益</span>
-          <span :class="totals.bloggerProfit >= 0 ? 'red' : 'green'">
+          <span :class="getProfitClass(totals.bloggerProfit)">
             {{ formatMoney(totals.bloggerProfit) }}（{{ formatPercent(totals.bloggerProfitRate) }}）
           </span>
         </div>
@@ -168,14 +180,11 @@ defineEmits<{
             <div class="metric-stack">
               <span
                 class="metric-main money-main profit-value"
-                :class="row.bloggerProfit >= 0 ? 'red' : 'green'"
+                :class="getProfitClass(row.bloggerProfit)"
               >
                 {{ formatMoney(row.bloggerProfit) }}
               </span>
-              <span
-                class="target-hint profit-value"
-                :class="row.bloggerRate >= 0 ? 'red' : 'green'"
-              >
+              <span class="target-hint profit-value" :class="getProfitClass(row.bloggerRate)">
                 {{ formatPercent(row.bloggerRate) }}
               </span>
             </div>
@@ -186,29 +195,29 @@ defineEmits<{
             <div class="metric-stack">
               <span
                 class="metric-main money-main profit-value"
-                :class="row.myProfit >= 0 ? 'red' : 'green'"
+                :class="getProfitClass(row.myProfit)"
               >
                 {{ formatMoney(row.myProfit) }}
               </span>
-              <span class="target-hint profit-value" :class="row.myRate >= 0 ? 'red' : 'green'">
+              <span class="target-hint profit-value" :class="getProfitClass(row.myRate)">
                 {{ formatPercent(row.myRate) }}
               </span>
             </div>
           </template>
         </vxe-column>
-        <vxe-column title="昨日收益" align="right">
+        <vxe-column title="当日收益" align="right">
           <template #default="{ row }">
             <div class="metric-stack">
               <span
                 class="metric-main money-main profit-value"
-                :class="row.myYesterdayProfit >= 0 ? 'red' : 'green'"
+                :class="getOptionalProfitClass(row.myDailyProfit)"
               >
-                {{ formatMoney(row.myYesterdayProfit) }}
+                {{ formatDailyProfit(formatMoney, row.myDailyProfit) }}
               </span>
               <span class="target-hint profit-value">
                 博主收益：
-                <span :class="row.bloggerYesterdayProfit >= 0 ? 'red' : 'green'">
-                  {{ formatMoney(row.bloggerYesterdayProfit) }}
+                <span :class="getOptionalProfitClass(row.bloggerDailyProfit)">
+                  {{ formatDailyProfit(formatMoney, row.bloggerDailyProfit) }}
                 </span>
               </span>
             </div>
