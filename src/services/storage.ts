@@ -31,6 +31,7 @@ export function createEmptyPortfolioState(): PortfolioState {
     holdings: [],
     operations: [],
     history: [],
+    holdingHistory: [],
     updatedAt: '',
   }
 }
@@ -40,6 +41,13 @@ export function loadPortfolio(): PortfolioState {
 
   if (persisted?.version === PORTFOLIO_SCHEMA_VERSION) {
     return persisted.payload
+  }
+
+  if (persisted?.payload) {
+    return {
+      ...persisted.payload,
+      holdingHistory: persisted.payload.holdingHistory ?? [],
+    }
   }
 
   return createEmptyPortfolioState()

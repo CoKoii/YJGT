@@ -124,6 +124,17 @@ export type ProfitSnapshot = {
   bloggerProfitRate: number
 }
 
+export type HoldingProfitSnapshot = {
+  date: string
+  fundCode: string
+  myAmount: number
+  myProfit: number
+  myProfitRate: number
+  bloggerAmount: number
+  bloggerProfit: number
+  bloggerProfitRate: number
+}
+
 export type FundTrendPoint = {
   date: string
   value: number
@@ -162,6 +173,7 @@ export type PortfolioState = {
   holdings: Holding[]
   operations: HoldingOperation[]
   history: ProfitSnapshot[]
+  holdingHistory: HoldingProfitSnapshot[]
   updatedAt: string
 }
 

@@ -6,7 +6,7 @@ import type {
   OperationSideValues,
 } from '@/types'
 import { formatDateKey } from '@/utils/date'
-import { getOperationTargetFund } from './calculations'
+import { getOperationSideValue, getOperationTargetFund, profitRate } from './calculations'
 
 type PositionKeys = {
   cost: 'myCost' | 'bloggerCost'
@@ -66,6 +66,16 @@ function latestTrendPoint(points: FundTrendPoint[]): FundTrendPoint | null {
 
 function previousTrendPoint(points: FundTrendPoint[], date: string): FundTrendPoint | null {
   return [...points].reverse().find((item) => item.date < date) ?? null
+}
+
+type HoldingSideState = {
+  shares: number
+  cost: number
+}
+
+type HoldingPerformancePoint = {
+  date: string
+  rate: number | null
 }
 
 export function createTradeDate(now = new Date()): string {
@@ -348,4 +358,144 @@ export function syncPortfolioLedger(
     ),
     operations: nextOperations,
   }
+}
+
+function getHoldingSideState(holding: Holding, side: InvestorSide): HoldingSideState {
+  const keys = getPositionKeys(side)
+  return {
+    shares: holding[keys.shares],
+    cost: holding[keys.cost],
+  }
+}
+
+function roundRate(value: number): number {
+  return Number(value.toFixed(2))
+}
+
+function buildRateFromState(state: HoldingSideState, nav: number): number | null {
+  if (state.shares <= 0 || state.cost <= 0 || nav <= 0) return null
+  return roundRate(profitRate(state.shares * nav, state.shares * nav - state.cost))
+}
+
+function subtractBuyFromState(state: HoldingSideState, amount: number, nav: number): HoldingSideState {
+  if (amount <= 0 || nav <= 0) return state
+
+  const sharesToRemove = amount / nav
+  return {
+    shares: Math.max(0, state.shares - sharesToRemove),
+    cost: roundMoney(Math.max(0, state.cost - amount)),
+  }
+}
+
+function addSellBackToState(state: HoldingSideState, sharesToAdd: number): HoldingSideState | null {
+  if (sharesToAdd <= 0) return state
+  if (state.shares <= 0 || state.cost < 0) return null
+
+  const averageCost = state.shares > 0 ? state.cost / state.shares : 0
+  return {
+    shares: state.shares + sharesToAdd,
+    cost: roundMoney(state.cost + averageCost * sharesToAdd),
+  }
+}
+
+function reverseOperationFromSource(
+  state: HoldingSideState,
+  operation: HoldingOperation,
+  side: InvestorSide,
+  sourceNav: number,
+): HoldingSideState | null {
+  if (operation.type === 'buy') {
+    return subtractBuyFromState(state, getOperationSideValue(operation, side), sourceNav)
+  }
+
+  return addSellBackToState(state, getOperationSideValue(operation, side))
+}
+
+function reverseOperationFromTarget(
+  state: HoldingSideState,
+  operation: HoldingOperation,
+  side: InvestorSide,
+  sourceNav: number,
+  targetNav: number,
+): HoldingSideState | null {
+  if (operation.type !== 'convert' || sourceNav <= 0 || targetNav <= 0) return state
+
+  const convertedAmount = roundMoney(getOperationSideValue(operation, side) * sourceNav)
+  return subtractBuyFromState(state, convertedAmount, targetNav)
+}
+
+export function buildHoldingPerformanceHistory(
+  holding: Holding,
+  operations: HoldingOperation[],
+  trend: FundTrendPoint[],
+  side: InvestorSide,
+): HoldingPerformancePoint[] {
+  if (trend.length === 0) return []
+
+  const keys = getPositionKeys(side)
+  const latestDate = holding[keys.navDate]
+  if (!latestDate) {
+    return trend.map((item) => ({ date: item.date, rate: null }))
+  }
+
+  const latestIndex = trend.findIndex((item) => item.date === latestDate)
+  if (latestIndex < 0) {
+    return trend.map((item) => ({ date: item.date, rate: null }))
+  }
+
+  const relevantOperations = operations
+    .filter((operation) => {
+      if (operation.status !== 'settled') return false
+      if (operation.fundCode === holding.fundCode) return true
+      return getOperationTargetFund(operation)?.code === holding.fundCode
+    })
+    .sort((left, right) => {
+      if (left.tradeDate === right.tradeDate) {
+        return right.submittedAt.localeCompare(left.submittedAt)
+      }
+      return right.tradeDate.localeCompare(left.tradeDate)
+    })
+
+  const operationsByDate = new Map<string, HoldingOperation[]>()
+  relevantOperations.forEach((operation) => {
+    const items = operationsByDate.get(operation.tradeDate) ?? []
+    items.push(operation)
+    operationsByDate.set(operation.tradeDate, items)
+  })
+
+  let state = getHoldingSideState(holding, side)
+  let reconstructable = true
+  const rateByDate = new Map<string, number | null>()
+
+  for (let index = latestIndex; index >= 0; index -= 1) {
+    const point = trend[index]
+    if (!point) continue
+    rateByDate.set(point.date, reconstructable ? buildRateFromState(state, point.value) : null)
+
+    const operationsOnDate = operationsByDate.get(point.date) ?? []
+    for (const operation of operationsOnDate) {
+      const sourceNav = operation.settledFundNav ?? findTrendPoint(trend, operation.tradeDate)?.value ?? 0
+      const targetNav =
+        operation.type === 'convert'
+          ? operation.settledTargetNav ?? findTrendPoint(trend, operation.tradeDate)?.value ?? 0
+          : 0
+
+      const nextState =
+        operation.fundCode === holding.fundCode
+          ? reverseOperationFromSource(state, operation, side, sourceNav)
+          : reverseOperationFromTarget(state, operation, side, operation.settledFundNav ?? 0, targetNav)
+
+      if (!nextState) {
+        reconstructable = false
+        break
+      }
+
+      state = nextState
+    }
+  }
+
+  return trend.map((item, index) => ({
+    date: item.date,
+    rate: index > latestIndex ? null : (rateByDate.get(item.date) ?? null),
+  }))
 }

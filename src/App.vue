@@ -217,6 +217,7 @@ function updateAiConfigForm(value: AiConfig) {
         :open="isDetailModalOpen"
         :holding="selectedHolding"
         :operations="store.operations"
+        :holding-history="store.holdingHistory"
         @update:open="isDetailModalOpen = $event"
       />
 

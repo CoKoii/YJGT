@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { HISTORY_LIMIT, OPERATION_LIMIT } from '@/constants/portfolio'
+import { HISTORY_LIMIT, HOLDING_HISTORY_LIMIT, OPERATION_LIMIT } from '@/constants/portfolio'
 import { createEmptyPortfolioState, loadPortfolio, savePortfolio } from '@/services/storage'
 import type {
   AiConfig,
@@ -9,6 +9,7 @@ import type {
   HoldingDraft,
   HoldingOperation,
   HoldingOperationDraft,
+  HoldingProfitSnapshot,
   PortfolioState,
   PortfolioTotals,
   ProfitSnapshot,
@@ -31,6 +32,31 @@ function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
   const latestByDate = new Map<string, ProfitSnapshot>()
   items.forEach((item) => latestByDate.set(item.date, item))
   return [...latestByDate.values()].slice(-HISTORY_LIMIT)
+}
+
+function compactHoldingHistory(items: HoldingProfitSnapshot[]): HoldingProfitSnapshot[] {
+  const latestByFundDate = new Map<string, HoldingProfitSnapshot>()
+  items.forEach((item) => latestByFundDate.set(`${item.fundCode}:${item.date}`, item))
+  return [...latestByFundDate.values()]
+    .sort((left, right) =>
+      left.date === right.date
+        ? left.fundCode.localeCompare(right.fundCode)
+        : left.date.localeCompare(right.date),
+    )
+    .slice(-HOLDING_HISTORY_LIMIT)
+}
+
+function createHoldingSnapshot(date: string, holding: Holding): HoldingProfitSnapshot {
+  return {
+    date,
+    fundCode: holding.fundCode,
+    myAmount: holding.myAmount,
+    myProfit: holding.myProfit,
+    myProfitRate: profitRate(holding.myAmount, holding.myProfit),
+    bloggerAmount: holding.bloggerAmount,
+    bloggerProfit: holding.bloggerProfit,
+    bloggerProfitRate: profitRate(holding.bloggerAmount, holding.bloggerProfit),
+  }
 }
 
 function createHoldingFromRecognition(side: 'mine' | 'blogger', data: RecognizedHolding, existing?: Holding): Holding {
@@ -89,6 +115,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const holdings = ref<Holding[]>(persisted.holdings)
   const operations = ref<HoldingOperation[]>(persisted.operations)
   const history = ref<ProfitSnapshot[]>(compactHistory(persisted.history))
+  const holdingHistory = ref<HoldingProfitSnapshot[]>(compactHoldingHistory(persisted.holdingHistory))
   const updatedAt = ref(persisted.updatedAt)
 
   const totals = computed<PortfolioTotals>(() => {
@@ -134,6 +161,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       holdings: holdings.value,
       operations: operations.value,
       history: history.value,
+      holdingHistory: holdingHistory.value,
       updatedAt: updatedAt.value,
     }
   }
@@ -151,6 +179,13 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       ...history.value.filter((item) => item.date !== snapshot.date),
       snapshot,
     ].slice(-HISTORY_LIMIT)
+
+    const holdingSnapshots = holdings.value
+      .filter((holding) => holding.myAmount > 0 || holding.bloggerAmount > 0)
+      .map((holding) => createHoldingSnapshot(snapshot.date, holding))
+
+    const remainingHistory = holdingHistory.value.filter((item) => item.date !== snapshot.date)
+    holdingHistory.value = compactHoldingHistory([...remainingHistory, ...holdingSnapshots])
   }
 
   function touch() {
@@ -240,6 +275,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     holdings.value = empty.holdings
     operations.value = empty.operations
     history.value = empty.history
+    holdingHistory.value = empty.holdingHistory
     updatedAt.value = empty.updatedAt
   }
 
@@ -248,7 +284,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   watch(
-    [budget, aiConfig, holdings, operations, history, updatedAt],
+    [budget, aiConfig, holdings, operations, history, holdingHistory, updatedAt],
     () => savePortfolio(serialize()),
     { deep: true },
   )
@@ -259,6 +295,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     holdings,
     operations,
     history,
+    holdingHistory,
     updatedAt,
     totals,
     setBudget,

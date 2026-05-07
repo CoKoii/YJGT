@@ -7,20 +7,20 @@ import {
   DEFAULT_TREND_RANGE,
 } from '@/constants/portfolio'
 import { fetchFundNetWorthTrend } from '@/services/fund'
+import { buildHoldingPerformanceHistory } from '@/utils/portfolioLedger'
 import type {
   DetailChartMode,
   FundTrendPoint,
   Holding,
   HoldingOperation,
+  HoldingProfitSnapshot,
   TrendRange,
 } from '@/types'
 import {
-  buildRateSeriesData,
   filterTrendByRange,
   findNearestTrendPoint,
   getOperationLabel,
   getOperationTargetFund,
-  profitRate,
   toPerformanceTrend,
 } from '@/utils/calculations'
 
@@ -28,6 +28,7 @@ const props = defineProps<{
   open: boolean
   holding: Holding | null
   operations: HoldingOperation[]
+  holdingHistory: HoldingProfitSnapshot[]
 }>()
 
 const emit = defineEmits<{
@@ -40,9 +41,23 @@ const detailChartMode = ref<DetailChartMode>(DEFAULT_DETAIL_CHART_MODE)
 const detailTrend = ref<FundTrendPoint[]>([])
 const isTrendLoading = ref(false)
 let chart: echarts.ECharts | null = null
+const MY_CHART_COLOR = '--brand'
+const BLOGGER_COLOR = '#10a37f'
 
 function getChartColor(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function createRateMap(
+  storedHistory: HoldingProfitSnapshot[],
+  fallbackHistory: Array<{ date: string; rate: number | null }>,
+  key: 'myProfitRate' | 'bloggerProfitRate',
+) {
+  return new Map(
+    (storedHistory.length > 0
+      ? storedHistory.map((item) => [item.date, item[key]])
+      : fallbackHistory.map((item) => [item.date, item.rate])) as Array<[string, number | null]>,
+  )
 }
 
 const title = computed(() =>
@@ -73,26 +88,64 @@ async function loadDetailTrend() {
 function renderChart() {
   if (!chartRef.value || !props.holding) return
   chart ??= echarts.init(chartRef.value)
+  const currentHolding = props.holding
+  const brandColor = getChartColor(MY_CHART_COLOR)
 
   const trend = filterTrendByRange(detailTrend.value, trendRange.value)
   const isPerformanceMode = detailChartMode.value === 'performance'
   const chartPoints = isPerformanceMode ? toPerformanceTrend(trend) : trend
-  const myRate = profitRate(props.holding.myAmount, props.holding.myProfit)
-  const bloggerRate = profitRate(props.holding.bloggerAmount, props.holding.bloggerProfit)
-  const holdingStartDate =
-    props.holding.myNavDate || props.holding.bloggerNavDate || chartPoints[0]?.date || ''
+  const storedHistory = props.holdingHistory
+    .filter((item) => item.fundCode === currentHolding.fundCode)
+    .sort((left, right) => left.date.localeCompare(right.date))
+  const settledOperations = relatedOperations.value.filter((item) => item.status === 'settled')
+  const fallbackMyHistory = buildHoldingPerformanceHistory(
+    currentHolding,
+    settledOperations,
+    trend,
+    'mine',
+  )
+  const fallbackBloggerHistory = buildHoldingPerformanceHistory(
+    currentHolding,
+    settledOperations,
+    trend,
+    'blogger',
+  )
+  const myRateByDate = createRateMap(storedHistory, fallbackMyHistory, 'myProfitRate')
+  const bloggerRateByDate = createRateMap(
+    storedHistory,
+    fallbackBloggerHistory,
+    'bloggerProfitRate',
+  )
+  const mySeriesData = chartPoints.map((item) => myRateByDate.get(item.date) ?? null)
+  const bloggerSeriesData = chartPoints.map((item) => bloggerRateByDate.get(item.date) ?? null)
 
   const operationData = relatedOperations.value
-    .map((item) => {
+    .flatMap((item) => {
       const point = findNearestTrendPoint(chartPoints, item.tradeDate)
-      return point
-        ? {
-            value: [point.date, Number(Math.max(myRate, bloggerRate).toFixed(2))],
-            label: getOperationLabel(item.type),
-          }
-        : null
+      if (!point) return []
+
+      const points = [
+        {
+          value: myRateByDate.get(point.date),
+          label: `我${getOperationLabel(item.type)}`,
+          color: brandColor,
+        },
+        {
+          value: bloggerRateByDate.get(point.date),
+          label: `博主${getOperationLabel(item.type)}`,
+          color: BLOGGER_COLOR,
+        },
+      ]
+
+      return points
+        .filter((operationPoint) => typeof operationPoint.value === 'number')
+        .map((operationPoint) => ({
+          value: [point.date, operationPoint.value as number],
+          label: operationPoint.label,
+          itemStyle: { color: operationPoint.color },
+          labelStyle: { color: operationPoint.color },
+        }))
     })
-    .filter(Boolean)
 
   const operationSeries = isPerformanceMode
     ? [
@@ -105,11 +158,10 @@ function renderChart() {
             show: true,
             formatter: ({ data }: { data?: { label?: string } }) => data?.label ?? '',
             position: 'right',
-            color: getChartColor('--brand'),
             fontWeight: 700,
+            color: brandColor,
           },
           data: operationData,
-          color: getChartColor('--brand'),
         },
       ]
     : []
@@ -127,15 +179,19 @@ function renderChart() {
           name: '我的收益率',
           type: 'line',
           smooth: true,
-          data: buildRateSeriesData(chartPoints, holdingStartDate, myRate),
-          color: getChartColor('--brand'),
+          connectNulls: false,
+          showSymbol: true,
+          data: mySeriesData,
+          color: brandColor,
         },
         {
           name: '博主收益率',
           type: 'line',
           smooth: true,
-          data: buildRateSeriesData(chartPoints, holdingStartDate, bloggerRate),
-          color: '#10a37f',
+          connectNulls: false,
+          showSymbol: true,
+          data: bloggerSeriesData,
+          color: BLOGGER_COLOR,
         },
         ...operationSeries,
       ]
@@ -232,6 +288,19 @@ watch(
     if (props.open) void loadDetailTrend()
   },
 )
+watch(
+  () => [props.holding?.myNavDate, props.holding?.myProfit, props.holding?.myYesterdayProfit],
+  renderChart,
+)
+watch(
+  () => [
+    props.holding?.bloggerNavDate,
+    props.holding?.bloggerProfit,
+    props.holding?.bloggerYesterdayProfit,
+  ],
+  renderChart,
+)
+watch(relatedOperations, renderChart, { deep: true })
 watch([trendRange, detailChartMode], renderChart)
 
 onUnmounted(() => {
