@@ -7,13 +7,19 @@ import VXETable from 'vxe-table'
 import 'vxe-table/lib/style.css'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { usePortfolioStore } from './stores/portfolio'
 import './styles.css'
 
 const app = createApp(App)
+const pinia = createPinia()
 
-app.use(createPinia())
+app.use(pinia)
 app.use(Antd)
 app.use(VxeUI)
 app.use(VXETable)
 
-app.mount('#app')
+const store = usePortfolioStore(pinia)
+
+void store.hydrate().finally(() => {
+  app.mount('#app')
+})

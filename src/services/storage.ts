@@ -2,15 +2,13 @@ import {
   AI_CHAT_STORAGE_KEY,
   DEFAULT_AI_CONFIG,
   DEFAULT_BUDGET,
-  PORTFOLIO_SCHEMA_VERSION,
   STORAGE_KEY,
 } from '@/constants/portfolio'
 import type { AiChatMessage, PortfolioState } from '@/types'
 
-interface PersistedPortfolio {
-  version: number
-  payload: PortfolioState
-}
+const PORTFOLIO_DB_NAME = 'yjgt-db'
+const PORTFOLIO_STORE_NAME = 'app_state'
+const PORTFOLIO_RECORD_KEY = 'portfolio'
 
 function parseStorageItem<T>(key: string): T | null {
   const raw = localStorage.getItem(key)
@@ -36,30 +34,72 @@ export function createEmptyPortfolioState(): PortfolioState {
   }
 }
 
-export function loadPortfolio(): PortfolioState {
-  const persisted = parseStorageItem<PersistedPortfolio>(STORAGE_KEY)
+function openPortfolioDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(PORTFOLIO_DB_NAME, 1)
 
-  if (persisted?.version === PORTFOLIO_SCHEMA_VERSION) {
-    return persisted.payload
-  }
-
-  if (persisted?.payload) {
-    return {
-      ...persisted.payload,
-      holdingHistory: persisted.payload.holdingHistory ?? [],
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(PORTFOLIO_STORE_NAME)) {
+        db.createObjectStore(PORTFOLIO_STORE_NAME)
+      }
     }
-  }
 
-  return createEmptyPortfolioState()
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error ?? new Error('打开 IndexedDB 失败'))
+  })
 }
 
-export function savePortfolio(data: PortfolioState): void {
-  const payload: PersistedPortfolio = {
-    version: PORTFOLIO_SCHEMA_VERSION,
-    payload: data,
-  }
+function runPortfolioTransaction<T>(
+  mode: IDBTransactionMode,
+  executor: (store: IDBObjectStore, resolve: (value: T) => void, reject: (error: Error) => void) => void,
+): Promise<T> {
+  return openPortfolioDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const transaction = db.transaction(PORTFOLIO_STORE_NAME, mode)
+        const store = transaction.objectStore(PORTFOLIO_STORE_NAME)
+        const rejectWithError = (error: Error) => reject(error)
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+        transaction.oncomplete = () => db.close()
+        transaction.onabort = () => {
+          db.close()
+          reject(transaction.error ?? new Error('IndexedDB 事务中止'))
+        }
+        transaction.onerror = () => {
+          db.close()
+          reject(transaction.error ?? new Error('IndexedDB 事务失败'))
+        }
+
+        executor(store, resolve, rejectWithError)
+      }),
+  )
+}
+
+export async function loadPortfolio(): Promise<PortfolioState> {
+  try {
+    const stored = await runPortfolioTransaction<PortfolioState | null>('readonly', (store, resolve, reject) => {
+      const request = store.get(PORTFOLIO_RECORD_KEY)
+      request.onsuccess = () => resolve((request.result as PortfolioState | undefined) ?? null)
+      request.onerror = () => reject(request.error ?? new Error('读取组合数据失败'))
+    })
+
+    return stored ?? createEmptyPortfolioState()
+  } catch {
+    return createEmptyPortfolioState()
+  }
+}
+
+export function savePortfolio(data: PortfolioState): Promise<void> {
+  return runPortfolioTransaction<void>('readwrite', (store, resolve, reject) => {
+    const request = store.put(data, PORTFOLIO_RECORD_KEY)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error('保存组合数据失败'))
+  })
+}
+
+export function clearLegacyPortfolioStorage(): void {
+  localStorage.removeItem(STORAGE_KEY)
 }
 
 export function loadAiChatMessages(): AiChatMessage[] {

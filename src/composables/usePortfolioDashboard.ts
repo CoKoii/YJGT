@@ -225,6 +225,8 @@ export function usePortfolioDashboard() {
   }
 
   async function syncPortfolioWithNetWorth(showResult = false) {
+    if (!store.isHydrated) return
+
     const fundCodes = [
       ...new Set(
         store.operations
@@ -659,11 +661,17 @@ export function usePortfolioDashboard() {
 
   watch(aiSide, resetAiRecognition)
 
-  if (!selectedHoldingId.value) {
-    selectedHoldingId.value = store.holdings[0]?.id ?? null
-  }
-
-  void syncPortfolioWithNetWorth()
+  watch(
+    () => store.isHydrated,
+    (isHydrated) => {
+      if (!isHydrated) return
+      if (!selectedHoldingId.value) {
+        selectedHoldingId.value = store.holdings[0]?.id ?? null
+      }
+      void syncPortfolioWithNetWorth()
+    },
+    { immediate: true },
+  )
 
   return {
     store,

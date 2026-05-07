@@ -109,14 +109,15 @@ function createHoldingFromRecognition(side: 'mine' | 'blogger', data: Recognized
 }
 
 export const usePortfolioStore = defineStore('portfolio', () => {
-  const persisted = loadPortfolio()
-  const budget = ref<BudgetConfig>(persisted.budget)
-  const aiConfig = ref<AiConfig>(persisted.aiConfig)
-  const holdings = ref<Holding[]>(persisted.holdings)
-  const operations = ref<HoldingOperation[]>(persisted.operations)
-  const history = ref<ProfitSnapshot[]>(compactHistory(persisted.history))
-  const holdingHistory = ref<HoldingProfitSnapshot[]>(compactHoldingHistory(persisted.holdingHistory))
-  const updatedAt = ref(persisted.updatedAt)
+  const empty = createEmptyPortfolioState()
+  const budget = ref<BudgetConfig>(empty.budget)
+  const aiConfig = ref<AiConfig>(empty.aiConfig)
+  const holdings = ref<Holding[]>(empty.holdings)
+  const operations = ref<HoldingOperation[]>(empty.operations)
+  const history = ref<ProfitSnapshot[]>(compactHistory(empty.history))
+  const holdingHistory = ref<HoldingProfitSnapshot[]>(compactHoldingHistory(empty.holdingHistory))
+  const updatedAt = ref(empty.updatedAt)
+  const isHydrated = ref(false)
 
   const totals = computed<PortfolioTotals>(() => {
     const latestMyNavDate = findLatestNavDate(holdings.value, 'myNavDate')
@@ -269,23 +270,38 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   function resetPortfolio() {
-    const empty = createEmptyPortfolioState()
-    budget.value = empty.budget
-    aiConfig.value = empty.aiConfig
-    holdings.value = empty.holdings
-    operations.value = empty.operations
-    history.value = empty.history
-    holdingHistory.value = empty.holdingHistory
-    updatedAt.value = empty.updatedAt
+    const nextState = createEmptyPortfolioState()
+    budget.value = nextState.budget
+    aiConfig.value = nextState.aiConfig
+    holdings.value = nextState.holdings
+    operations.value = nextState.operations
+    history.value = nextState.history
+    holdingHistory.value = nextState.holdingHistory
+    updatedAt.value = nextState.updatedAt
   }
 
   function exportJson(): string {
     return JSON.stringify(serialize(), null, 2)
   }
 
+  async function hydrate() {
+    const persisted = await loadPortfolio()
+    budget.value = persisted.budget
+    aiConfig.value = persisted.aiConfig
+    holdings.value = persisted.holdings
+    operations.value = persisted.operations
+    history.value = compactHistory(persisted.history)
+    holdingHistory.value = compactHoldingHistory(persisted.holdingHistory)
+    updatedAt.value = persisted.updatedAt
+    isHydrated.value = true
+  }
+
   watch(
     [budget, aiConfig, holdings, operations, history, holdingHistory, updatedAt],
-    () => savePortfolio(serialize()),
+    () => {
+      if (!isHydrated.value) return
+      void savePortfolio(serialize())
+    },
     { deep: true },
   )
 
@@ -297,7 +313,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     history,
     holdingHistory,
     updatedAt,
+    isHydrated,
     totals,
+    hydrate,
     setBudget,
     setAiConfig,
     upsertHolding,
