@@ -37,13 +37,13 @@ const amountFieldsForExit = computed(() => {
     {
       key: 'blogger',
       owner: 'blogger' as const,
-      label: `博主${actionText}金额`,
+      label: `博主${actionText}份额`,
       formKey: 'bloggerAmount' as const,
     },
     {
       key: 'mine',
       owner: 'mine' as const,
-      label: `我的${actionText}金额`,
+      label: `我的${actionText}份额`,
       formKey: 'myAmount' as const,
     },
   ]
@@ -88,7 +88,11 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
             <a-form-item :label="item.label" class="operation-field">
               <div class="operation-share-panel">
                 <a-space wrap class="operation-share-actions">
-                  <a-button v-for="ratio in AMOUNT_RATIOS" :key="ratio.label" @click="emit('set-ratio', item.owner, ratio.value)">
+                  <a-button
+                    v-for="ratio in AMOUNT_RATIOS"
+                    :key="ratio.label"
+                    @click="emit('set-ratio', item.owner, ratio.value)"
+                  >
                     {{ ratio.label }}
                   </a-button>
                 </a-space>
@@ -96,8 +100,8 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
                   :value="props.form[item.formKey]"
                   :min="0"
                   :precision="2"
-                  addon-before="¥"
-                  placeholder="手动输入金额"
+                  addon-after="份"
+                  placeholder="手动输入份额"
                   class="operation-share-input"
                   @update:value="updateFormField(item.formKey, Number($event ?? 0))"
                 />

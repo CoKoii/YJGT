@@ -140,17 +140,22 @@ function applyBuy(holding: Holding, side: InvestorSide, amount: number, nav: num
   return nextHolding
 }
 
-function applySellLike(holding: Holding, side: InvestorSide, amount: number, nav: number): Holding {
+function applySellLike(
+  holding: Holding,
+  side: InvestorSide,
+  sharesToReduce: number,
+  nav: number,
+): Holding {
   const keys = getPositionKeys(side)
   const nextHolding = { ...holding }
   const currentShares = nextHolding[keys.shares]
   if (currentShares <= 0 || nav <= 0) return nextHolding
 
-  const sharesToReduce = Math.min(currentShares, amount / nav)
+  const reducedShares = Math.min(currentShares, sharesToReduce)
   const costToReduce =
-    currentShares > 0 ? (nextHolding[keys.cost] * sharesToReduce) / currentShares : 0
+    currentShares > 0 ? (nextHolding[keys.cost] * reducedShares) / currentShares : 0
 
-  nextHolding[keys.shares] = Math.max(0, currentShares - sharesToReduce)
+  nextHolding[keys.shares] = Math.max(0, currentShares - reducedShares)
   nextHolding[keys.cost] = roundMoney(Math.max(0, nextHolding[keys.cost] - costToReduce))
   nextHolding[keys.amount] = roundMoney(nextHolding[keys.shares] * nav)
   nextHolding[keys.profit] = roundMoney(nextHolding[keys.amount] - nextHolding[keys.cost])
@@ -241,14 +246,20 @@ export function syncPortfolioLedger(
       operation.tradeDate,
     )
 
+    let bloggerConvertedAmount = 0
     if (operation.bloggerAmount > 0) {
+      bloggerConvertedAmount =
+        operation.type === 'convert' ? roundMoney(operation.bloggerAmount * sourceNav) : 0
       sourceHolding =
         operation.type === 'buy'
           ? applyBuy(sourceHolding, 'blogger', operation.bloggerAmount, sourceNav)
           : applySellLike(sourceHolding, 'blogger', operation.bloggerAmount, sourceNav)
     }
 
+    let myConvertedAmount = 0
     if (operation.myAmount > 0) {
+      myConvertedAmount =
+        operation.type === 'convert' ? roundMoney(operation.myAmount * sourceNav) : 0
       sourceHolding =
         operation.type === 'buy'
           ? applyBuy(sourceHolding, 'mine', operation.myAmount, sourceNav)
@@ -280,11 +291,11 @@ export function syncPortfolioLedger(
       )
 
       if (operation.bloggerAmount > 0) {
-        targetHolding = applyBuy(targetHolding, 'blogger', operation.bloggerAmount, targetNav)
+        targetHolding = applyBuy(targetHolding, 'blogger', bloggerConvertedAmount, targetNav)
       }
 
       if (operation.myAmount > 0) {
-        targetHolding = applyBuy(targetHolding, 'mine', operation.myAmount, targetNav)
+        targetHolding = applyBuy(targetHolding, 'mine', myConvertedAmount, targetNav)
       }
 
       holdingsByFundCode.set(operation.toFundCode, {

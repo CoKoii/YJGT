@@ -217,23 +217,34 @@ export function usePortfolioDashboard() {
   }
 
   async function syncPortfolioWithNetWorth(showResult = false) {
-    const fundCodes = [...new Set(store.operations.flatMap(buildOperationFundCodes).concat(store.holdings.map((item) => item.fundCode)))]
-      .filter((fundCode) => FUND_CODE_PATTERN.test(fundCode))
+    const fundCodes = [
+      ...new Set(
+        store.operations
+          .flatMap(buildOperationFundCodes)
+          .concat(store.holdings.map((item) => item.fundCode)),
+      ),
+    ].filter((fundCode) => FUND_CODE_PATTERN.test(fundCode))
 
     if (fundCodes.length === 0 || isSyncingNetWorth.value) return
 
     isSyncingNetWorth.value = true
     try {
-      const trendList = await Promise.all(fundCodes.map((fundCode) => fetchFundNetWorthTrend(fundCode)))
+      const trendList = await Promise.all(
+        fundCodes.map((fundCode) => fetchFundNetWorthTrend(fundCode)),
+      )
       const trends = new Map<string, Awaited<ReturnType<typeof fetchFundNetWorthTrend>>>(
         fundCodes.map((fundCode, index) => [fundCode, trendList[index] ?? []]),
       )
       const { holdings, operations } = syncPortfolioLedger(store.holdings, store.operations, trends)
 
       const nextSerialized = JSON.stringify({ holdings, operations })
-      const currentSerialized = JSON.stringify({ holdings: store.holdings, operations: store.operations })
+      const currentSerialized = JSON.stringify({
+        holdings: store.holdings,
+        operations: store.operations,
+      })
       if (nextSerialized !== currentSerialized) {
-        const settledCount = operations.filter((item) => item.status === 'settled').length -
+        const settledCount =
+          operations.filter((item) => item.status === 'settled').length -
           store.operations.filter((item) => item.status === 'settled').length
         store.setSyncedPortfolio(holdings, operations)
         if (showResult && settledCount > 0) {
@@ -343,8 +354,8 @@ export function usePortfolioDashboard() {
     const baseHolding = selectedOperationHolding.value
     if (!baseHolding) return
 
-    const baseAmount = owner === 'blogger' ? baseHolding.bloggerAmount : baseHolding.myAmount
-    const nextAmount = Number((baseAmount * amountRatio).toFixed(2))
+    const baseShares = owner === 'blogger' ? baseHolding.bloggerShares : baseHolding.myShares
+    const nextAmount = Number((baseShares * amountRatio).toFixed(2))
     if (owner === 'blogger') {
       operationForm.bloggerAmount = nextAmount
       return
@@ -364,7 +375,9 @@ export function usePortfolioDashboard() {
 
   async function saveOperation() {
     if (operationForm.bloggerAmount <= 0 && operationForm.myAmount <= 0) {
-      message.warning('请填写博主金额或我的金额')
+      message.warning(
+        operationForm.type === 'buy' ? '请填写博主金额或我的金额' : '请填写博主份额或我的份额',
+      )
       return
     }
 
@@ -377,12 +390,12 @@ export function usePortfolioDashboard() {
     }
 
     if (operationForm.type !== 'buy' && selectedOperationHolding.value) {
-      if (operationForm.bloggerAmount > selectedOperationHolding.value.bloggerAmount + 0.01) {
-        message.warning('博主操作金额不能超过当前持有金额')
+      if (operationForm.bloggerAmount > selectedOperationHolding.value.bloggerShares + 0.01) {
+        message.warning('博主操作份额不能超过当前持有份额')
         return
       }
-      if (operationForm.myAmount > selectedOperationHolding.value.myAmount + 0.01) {
-        message.warning('我的操作金额不能超过当前持有金额')
+      if (operationForm.myAmount > selectedOperationHolding.value.myShares + 0.01) {
+        message.warning('我的操作份额不能超过当前持有份额')
         return
       }
     }

@@ -141,9 +141,7 @@ function updateAiConfigForm(value: AiConfig) {
 </script>
 
 <template>
-  <a-config-provider
-    :theme="antThemeConfig"
-  >
+  <a-config-provider :theme="antThemeConfig">
     <a-layout class="app-shell">
       <a-layout-header class="page-header">
         <a-row align="middle" justify="space-between" :wrap="false">
@@ -261,6 +259,7 @@ function updateAiConfigForm(value: AiConfig) {
         :open="isOperationDetailOpen"
         :operations="selectedOperations"
         :format-money="formatMoney"
+        :format-number="formatNumber"
         :get-operation-action-text="getOperationActionText"
         @update:open="isOperationDetailOpen = $event"
         @revoke="revokeSelectedOperations"

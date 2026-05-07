@@ -5,6 +5,7 @@ defineProps<{
   open: boolean
   operations: HoldingOperation[]
   formatMoney: (value: number) => string
+  formatNumber: (value: number) => string
   getOperationActionText: (type: HoldingOperation['type']) => string
 }>()
 
@@ -39,11 +40,19 @@ defineEmits<{
             <a-descriptions-item v-if="operation.toFundName" label="转入基金">
               {{ operation.toFundName }}（{{ operation.toFundCode }}）
             </a-descriptions-item>
-            <a-descriptions-item label="博主金额">
-              {{ formatMoney(operation.bloggerAmount) }}
+            <a-descriptions-item :label="operation.type === 'buy' ? '博主金额' : '博主份额'">
+              {{
+                operation.type === 'buy'
+                  ? formatMoney(operation.bloggerAmount)
+                  : `${formatNumber(operation.bloggerAmount)} 份`
+              }}
             </a-descriptions-item>
-            <a-descriptions-item label="我的金额">
-              {{ formatMoney(operation.myAmount) }}
+            <a-descriptions-item :label="operation.type === 'buy' ? '我的金额' : '我的份额'">
+              {{
+                operation.type === 'buy'
+                  ? formatMoney(operation.myAmount)
+                  : `${formatNumber(operation.myAmount)} 份`
+              }}
             </a-descriptions-item>
             <a-descriptions-item label="记录时间">
               {{ new Date(operation.submittedAt).toLocaleString('zh-CN', { hour12: false }) }}
