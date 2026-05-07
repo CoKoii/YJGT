@@ -180,50 +180,6 @@ export function usePortfolioDashboard() {
     ),
   )
 
-  function buildPortfolioSnapshot() {
-    return {
-      budget: store.budget,
-      totals: store.totals,
-      followRatio: ratio.value,
-      holdings: holdingRows.value.map((item) => ({
-        fundName: item.fundName,
-        fundCode: item.fundCode,
-        navDate: item.latestNavDate,
-        targetInvested: item.targetInvested,
-        pendingOperations: item.pendingOperations.length,
-        raw: {
-          id: item.id,
-          fundName: item.fundName,
-          fundCode: item.fundCode,
-          myCost: item.myCost,
-          myShares: item.myShares,
-          myNav: item.myNav,
-          myNavDate: item.myNavDate,
-          myAmount: item.myAmount,
-          myProfit: item.myProfit,
-          myYesterdayProfit: item.myYesterdayProfit,
-          bloggerCost: item.bloggerCost,
-          bloggerShares: item.bloggerShares,
-          bloggerNav: item.bloggerNav,
-          bloggerNavDate: item.bloggerNavDate,
-          bloggerAmount: item.bloggerAmount,
-          bloggerProfit: item.bloggerProfit,
-          bloggerYesterdayProfit: item.bloggerYesterdayProfit,
-          updatedAt: item.updatedAt,
-        },
-        derived: {
-          myInvested: item.myInvested,
-          bloggerInvested: item.bloggerInvested,
-          myRate: item.myRate,
-          bloggerRate: item.bloggerRate,
-          myPositionRate: item.myPositionRate,
-          bloggerPositionRate: item.bloggerPositionRate,
-        },
-      })),
-      operations: store.operations.map((item) => ({ ...item })),
-    }
-  }
-
   async function syncPortfolioWithNetWorth(showResult = false) {
     if (!store.isHydrated) return
 
@@ -591,7 +547,6 @@ export function usePortfolioDashboard() {
       await streamPortfolioChat({
         config: store.aiConfig,
         messages: aiChatMessages.value.filter((item) => item.id !== assistantMessage.id),
-        portfolioSnapshot: buildPortfolioSnapshot(),
         onDelta: (delta) => {
           assistantMessage.content += delta
           aiChatMessages.value = aiChatMessages.value.map((item) =>

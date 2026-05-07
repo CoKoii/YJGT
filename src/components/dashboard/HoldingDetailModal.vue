@@ -127,12 +127,12 @@ function renderChart() {
       const points = [
         {
           value: myRateByDate.get(point.date),
-          label: `我${getOperationLabel(item.type)}`,
+          label: getOperationLabel(item.type),
           color: brandColor,
         },
         {
           value: bloggerRateByDate.get(point.date),
-          label: `博主${getOperationLabel(item.type)}`,
+          label: getOperationLabel(item.type),
           color: BLOGGER_COLOR,
         },
       ]

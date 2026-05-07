@@ -1,19 +1,17 @@
 import { fetchFundInfo, fetchFundNetWorthTrend, searchFundByName } from '@/services/fund'
+import {
+  getHoldingDetailTool,
+  getPortfolioSummaryTool,
+  listPortfolioHoldingsTool,
+  listPortfolioOperationsTool,
+} from '@/services/portfolioTools'
 import type {
   AiChatMessage,
   AiConfig,
   FundTrendPoint,
-  Holding,
-  HoldingOperation,
-  PortfolioTotals,
 } from '@/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
-import {
-  getOperationSideValue,
-  getOperationTargetFund,
-  getOperationValueLabel,
-} from '@/utils/calculations'
 import { createAiModel, readAiTextContent } from './shared'
 
 const FUND_TOOLS: any[] = [
@@ -154,70 +152,6 @@ const PORTFOLIO_TOOLS: any[] = [
   },
 ]
 
-function formatOperationForAi(operation: HoldingOperation) {
-  const valueKind = operation.type === 'buy' ? 'amount' : 'shares'
-  const valueLabel = getOperationValueLabel(operation.type)
-  const valueUnit = operation.type === 'buy' ? 'CNY' : 'share'
-  const targetFund = getOperationTargetFund(operation)
-  const myValue = getOperationSideValue(operation, 'mine')
-  const bloggerValue = getOperationSideValue(operation, 'blogger')
-
-  return {
-    id: operation.id,
-    type: operation.type,
-    status: operation.status,
-    source: operation.source,
-    fundCode: operation.fundCode,
-    fundName: operation.fundName,
-    targetFund,
-    submittedAt: operation.submittedAt,
-    tradeDate: operation.tradeDate,
-    settledAt: operation.settledAt ?? null,
-    settledFundNav: operation.settledFundNav ?? null,
-    settledTargetNav: operation.settledTargetNav ?? null,
-    valueKind,
-    valueLabel,
-    valueUnit,
-    my: {
-      value: myValue,
-      [valueKind]: myValue,
-    },
-    blogger: {
-      value: bloggerValue,
-      [valueKind]: bloggerValue,
-    },
-  }
-}
-
-type PortfolioAiSnapshot = {
-  budget: {
-    myBudget: number
-    bloggerBudget: number
-  }
-  totals: PortfolioTotals
-  followRatio: {
-    blogger: number
-    mine: number
-  }
-  holdings: Array<{
-    fundName: string
-    fundCode: string
-    navDate: string
-    targetInvested: number
-    pendingOperations: number
-    raw: Holding
-    derived: {
-      myInvested: number
-      bloggerInvested: number
-      myRate: number
-      bloggerRate: number
-      myPositionRate: number
-      bloggerPositionRate: number
-    }
-  }>
-  operations: HoldingOperation[]
-}
-
 function isValidDateInput(value: any) {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
 }
@@ -325,207 +259,24 @@ async function runFundToolCall(toolCall: any) {
   }
 }
 
-function normalizeLimit(value: unknown, fallback: number, max: number) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback
-  return Math.min(Math.floor(value), max)
-}
-
-function getHoldingSortValue(holding: PortfolioAiSnapshot['holdings'][number], sortBy: string) {
-  switch (sortBy) {
-    case 'bloggerAmount':
-      return holding.raw.bloggerAmount
-    case 'myProfit':
-      return holding.raw.myProfit
-    case 'bloggerProfit':
-      return holding.raw.bloggerProfit
-    case 'myRate':
-      return holding.derived.myRate
-    case 'bloggerRate':
-      return holding.derived.bloggerRate
-    case 'myAmount':
-    default:
-      return holding.raw.myAmount
-  }
-}
-
-function pickHolding(
-  snapshot: PortfolioAiSnapshot,
-  args: { fundCode?: unknown; fundName?: unknown },
-) {
-  const fundCode = typeof args.fundCode === 'string' ? args.fundCode.trim() : ''
-  const fundName = typeof args.fundName === 'string' ? args.fundName.trim() : ''
-
-  if (fundCode) {
-    return snapshot.holdings.find((item) => item.fundCode === fundCode) ?? null
-  }
-
-  if (fundName) {
-    return (
-      snapshot.holdings.find(
-        (item) => item.fundName === fundName || item.fundName.includes(fundName),
-      ) ?? null
-    )
-  }
-
-  return null
-}
-
-async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot) {
+async function runPortfolioToolCall(toolCall: any) {
   const args = typeof toolCall.args === 'string' ? JSON.parse(toolCall.args) : (toolCall.args ?? {})
 
   try {
     if (toolCall.name === 'get_portfolio_summary') {
-      return JSON.stringify(
-        {
-          ok: true,
-          tool: toolCall.name,
-          budget: snapshot.budget,
-          totals: snapshot.totals,
-          followRatio: snapshot.followRatio,
-          holdingCount: snapshot.holdings.length,
-          pendingOperationCount: snapshot.operations.filter((item) => item.status === 'pending')
-            .length,
-          settledOperationCount: snapshot.operations.filter((item) => item.status === 'settled')
-            .length,
-        },
-        null,
-        2,
-      )
+      return JSON.stringify(await getPortfolioSummaryTool(), null, 2)
     }
 
     if (toolCall.name === 'list_portfolio_holdings') {
-      const sortBy = typeof args.sortBy === 'string' ? args.sortBy : 'myAmount'
-      const order = args.order === 'asc' ? 'asc' : 'desc'
-      const limit = normalizeLimit(args.limit, snapshot.holdings.length || 20, 100)
-      const sorted = [...snapshot.holdings].sort((left, right) => {
-        const leftValue = getHoldingSortValue(left, sortBy)
-        const rightValue = getHoldingSortValue(right, sortBy)
-        return order === 'asc' ? leftValue - rightValue : rightValue - leftValue
-      })
-
-      return JSON.stringify(
-        {
-          ok: true,
-          tool: toolCall.name,
-          total: snapshot.holdings.length,
-          returned: Math.min(limit, sorted.length),
-          holdings: sorted.slice(0, limit).map((item) => ({
-            fundName: item.fundName,
-            fundCode: item.fundCode,
-            navDate: item.navDate,
-            pendingOperations: item.pendingOperations,
-            targetInvested: item.targetInvested,
-            my: {
-              amount: item.raw.myAmount,
-              profit: item.raw.myProfit,
-              profitRate: item.derived.myRate,
-              invested: item.derived.myInvested,
-              positionRate: item.derived.myPositionRate,
-              shares: item.raw.myShares,
-              cost: item.raw.myCost,
-              nav: item.raw.myNav,
-              yesterdayProfit: item.raw.myYesterdayProfit,
-            },
-            blogger: {
-              amount: item.raw.bloggerAmount,
-              profit: item.raw.bloggerProfit,
-              profitRate: item.derived.bloggerRate,
-              invested: item.derived.bloggerInvested,
-              positionRate: item.derived.bloggerPositionRate,
-              shares: item.raw.bloggerShares,
-              cost: item.raw.bloggerCost,
-              nav: item.raw.bloggerNav,
-              yesterdayProfit: item.raw.bloggerYesterdayProfit,
-            },
-          })),
-        },
-        null,
-        2,
-      )
+      return JSON.stringify(await listPortfolioHoldingsTool(args), null, 2)
     }
 
     if (toolCall.name === 'get_holding_detail') {
-      const holding = pickHolding(snapshot, args)
-      if (!holding) {
-        return JSON.stringify({ ok: false, tool: toolCall.name, error: '未找到对应持仓' }, null, 2)
-      }
-
-      const relatedOperations = snapshot.operations
-        .filter(
-          (item) =>
-            item.fundCode === holding.fundCode ||
-            getOperationTargetFund(item)?.code === holding.fundCode,
-        )
-        .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
-
-      return JSON.stringify(
-        {
-          ok: true,
-          tool: toolCall.name,
-          holding: {
-            fundName: holding.fundName,
-            fundCode: holding.fundCode,
-            navDate: holding.navDate,
-            targetInvested: holding.targetInvested,
-            pendingOperations: holding.pendingOperations,
-            my: {
-              amount: holding.raw.myAmount,
-              profit: holding.raw.myProfit,
-              profitRate: holding.derived.myRate,
-              invested: holding.derived.myInvested,
-              positionRate: holding.derived.myPositionRate,
-              shares: holding.raw.myShares,
-              cost: holding.raw.myCost,
-              nav: holding.raw.myNav,
-              yesterdayProfit: holding.raw.myYesterdayProfit,
-            },
-            blogger: {
-              amount: holding.raw.bloggerAmount,
-              profit: holding.raw.bloggerProfit,
-              profitRate: holding.derived.bloggerRate,
-              invested: holding.derived.bloggerInvested,
-              positionRate: holding.derived.bloggerPositionRate,
-              shares: holding.raw.bloggerShares,
-              cost: holding.raw.bloggerCost,
-              nav: holding.raw.bloggerNav,
-              yesterdayProfit: holding.raw.bloggerYesterdayProfit,
-            },
-          },
-          relatedOperations: relatedOperations.map(formatOperationForAi),
-        },
-        null,
-        2,
-      )
+      return JSON.stringify(await getHoldingDetailTool(args), null, 2)
     }
 
     if (toolCall.name === 'list_portfolio_operations') {
-      const fundCode = typeof args.fundCode === 'string' ? args.fundCode.trim() : ''
-      const status = args.status === 'pending' || args.status === 'settled' ? args.status : ''
-      const type =
-        args.type === 'buy' || args.type === 'sell' || args.type === 'convert' ? args.type : ''
-      const limit = normalizeLimit(args.limit, 50, 200)
-
-      const operations = snapshot.operations
-        .filter((item) =>
-          fundCode
-            ? item.fundCode === fundCode || getOperationTargetFund(item)?.code === fundCode
-            : true,
-        )
-        .filter((item) => (status ? item.status === status : true))
-        .filter((item) => (type ? item.type === type : true))
-        .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
-
-      return JSON.stringify(
-        {
-          ok: true,
-          tool: toolCall.name,
-          total: operations.length,
-          returned: Math.min(limit, operations.length),
-          operations: operations.slice(0, limit).map(formatOperationForAi),
-        },
-        null,
-        2,
-      )
+      return JSON.stringify(await listPortfolioOperationsTool(args), null, 2)
     }
 
     return JSON.stringify({ ok: false, tool: toolCall.name, error: '不支持的工具调用' }, null, 2)
@@ -545,7 +296,6 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
 async function resolveToolMessages(
   config: AiConfig,
   messages: any[],
-  snapshot: PortfolioAiSnapshot,
 ) {
   const model = createAiModel(config, 0.2).bindTools([...FUND_TOOLS, ...PORTFOLIO_TOOLS], {
     tool_choice: 'auto',
@@ -561,7 +311,7 @@ async function resolveToolMessages(
     const toolMessages = await Promise.all(
       assistantMessage.tool_calls.map(async (toolCall: any) => {
         const content = PORTFOLIO_TOOLS.some((item) => item.function.name === toolCall.name)
-          ? await runPortfolioToolCall(toolCall, snapshot)
+          ? await runPortfolioToolCall(toolCall)
           : await runFundToolCall(toolCall)
 
         return new ToolMessage({
@@ -580,12 +330,10 @@ async function resolveToolMessages(
 export async function streamPortfolioChat({
   config,
   messages,
-  portfolioSnapshot,
   onDelta,
 }: {
   config: AiConfig
   messages: AiChatMessage[]
-  portfolioSnapshot: PortfolioAiSnapshot
   onDelta: (delta: string) => void
 }) {
   const baseMessages = [
@@ -600,7 +348,7 @@ export async function streamPortfolioChat({
     ),
   ]
 
-  const resolvedMessages = await resolveToolMessages(config, baseMessages, portfolioSnapshot)
+  const resolvedMessages = await resolveToolMessages(config, baseMessages)
   const stream = await createAiModel(config, 0.2).stream(resolvedMessages)
 
   for await (const chunk of stream) {
