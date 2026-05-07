@@ -42,7 +42,17 @@ export type Holding = {
 export type HoldingDraft = Omit<Holding, 'updatedAt'>
 export type HoldingFormModel = HoldingDraft
 
-export type HoldingOperation = {
+export type OperationSideValues = {
+  mine: number
+  blogger: number
+}
+
+export type OperationTargetFund = {
+  code: string
+  name: string
+}
+
+type HoldingOperationBase = {
   id: string
   type: OperationType
   submittedAt: string
@@ -51,28 +61,59 @@ export type HoldingOperation = {
   status: OperationStatus
   fundCode: string
   fundName: string
-  bloggerAmount: number
-  myAmount: number
-  toFundCode?: string
-  toFundName?: string
   settledAt?: string
   settledFundNav?: number
   settledTargetNav?: number
 }
 
-export type HoldingOperationDraft = Omit<
-  HoldingOperation,
-  'id' | 'submittedAt' | 'tradeDate' | 'source' | 'status'
->
+export type BuyOperation = HoldingOperationBase & {
+  type: 'buy'
+  amounts: OperationSideValues
+}
+
+export type SellOperation = HoldingOperationBase & {
+  type: 'sell'
+  shares: OperationSideValues
+}
+
+export type ConvertOperation = HoldingOperationBase & {
+  type: 'convert'
+  shares: OperationSideValues
+  targetFund: OperationTargetFund
+}
+
+export type HoldingOperation = BuyOperation | SellOperation | ConvertOperation
+
+type HoldingOperationDraftBase = {
+  fundCode: string
+  fundName: string
+}
+
+export type BuyOperationDraft = HoldingOperationDraftBase & {
+  type: 'buy'
+  amounts: OperationSideValues
+}
+
+export type SellOperationDraft = HoldingOperationDraftBase & {
+  type: 'sell'
+  shares: OperationSideValues
+}
+
+export type ConvertOperationDraft = HoldingOperationDraftBase & {
+  type: 'convert'
+  shares: OperationSideValues
+  targetFund: OperationTargetFund
+}
+
+export type HoldingOperationDraft = BuyOperationDraft | SellOperationDraft | ConvertOperationDraft
 
 export type OperationFormModel = {
   type: OperationType
-  bloggerAmount: number
-  myAmount: number
   fundCode: string
   fundName: string
-  toFundCode: string
-  toFundName: string
+  amounts: OperationSideValues
+  shares: OperationSideValues
+  targetFund: OperationTargetFund
 }
 
 export type ProfitSnapshot = {

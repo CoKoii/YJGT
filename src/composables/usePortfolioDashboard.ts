@@ -38,12 +38,20 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 function createOperationForm(): OperationFormModel {
   return {
     type: 'buy',
-    bloggerAmount: 0,
-    myAmount: 0,
     fundCode: '',
     fundName: '',
-    toFundCode: '',
-    toFundName: '',
+    amounts: {
+      mine: 0,
+      blogger: 0,
+    },
+    shares: {
+      mine: 0,
+      blogger: 0,
+    },
+    targetFund: {
+      code: '',
+      name: '',
+    },
   }
 }
 
@@ -344,9 +352,9 @@ export function usePortfolioDashboard() {
   }
 
   function syncMyOperationAmount() {
-    operationForm.myAmount =
+    operationForm.amounts.mine =
       ratio.value.blogger > 0
-        ? Number((operationForm.bloggerAmount / ratio.value.blogger).toFixed(2))
+        ? Number((operationForm.amounts.blogger / ratio.value.blogger).toFixed(2))
         : 0
   }
 
@@ -357,24 +365,25 @@ export function usePortfolioDashboard() {
     const baseShares = owner === 'blogger' ? baseHolding.bloggerShares : baseHolding.myShares
     const nextAmount = Number((baseShares * amountRatio).toFixed(2))
     if (owner === 'blogger') {
-      operationForm.bloggerAmount = nextAmount
+      operationForm.shares.blogger = nextAmount
       return
     }
 
-    operationForm.myAmount = nextAmount
+    operationForm.shares.mine = nextAmount
   }
 
   async function fillOperationTargetFundName() {
-    const code = operationForm.toFundCode.trim()
+    const code = operationForm.targetFund.code.trim()
     if (!FUND_CODE_PATTERN.test(code)) return
 
     const fundInfo = await fetchFundInfo(code)
-    operationForm.toFundCode = fundInfo?.code ?? code
-    operationForm.toFundName = fundInfo?.name ?? operationForm.toFundName
+    operationForm.targetFund.code = fundInfo?.code ?? code
+    operationForm.targetFund.name = fundInfo?.name ?? operationForm.targetFund.name
   }
 
   async function saveOperation() {
-    if (operationForm.bloggerAmount <= 0 && operationForm.myAmount <= 0) {
+    const values = operationForm.type === 'buy' ? operationForm.amounts : operationForm.shares
+    if (values.blogger <= 0 && values.mine <= 0) {
       message.warning(
         operationForm.type === 'buy' ? '请填写博主金额或我的金额' : '请填写博主份额或我的份额',
       )
@@ -383,32 +392,50 @@ export function usePortfolioDashboard() {
 
     if (
       operationForm.type === 'convert' &&
-      (!FUND_CODE_PATTERN.test(operationForm.toFundCode.trim()) || !operationForm.toFundName.trim())
+      (!FUND_CODE_PATTERN.test(operationForm.targetFund.code.trim()) ||
+        !operationForm.targetFund.name.trim())
     ) {
       message.warning('请填写转入基金代码和名称')
       return
     }
 
     if (operationForm.type !== 'buy' && selectedOperationHolding.value) {
-      if (operationForm.bloggerAmount > selectedOperationHolding.value.bloggerShares + 0.01) {
+      if (operationForm.shares.blogger > selectedOperationHolding.value.bloggerShares + 0.01) {
         message.warning('博主操作份额不能超过当前持有份额')
         return
       }
-      if (operationForm.myAmount > selectedOperationHolding.value.myShares + 0.01) {
+      if (operationForm.shares.mine > selectedOperationHolding.value.myShares + 0.01) {
         message.warning('我的操作份额不能超过当前持有份额')
         return
       }
     }
 
-    store.recordOperation({
-      type: operationForm.type,
-      fundCode: operationForm.fundCode,
-      fundName: operationForm.fundName,
-      bloggerAmount: operationForm.bloggerAmount,
-      myAmount: operationForm.myAmount,
-      toFundCode: operationForm.type === 'convert' ? operationForm.toFundCode.trim() : undefined,
-      toFundName: operationForm.type === 'convert' ? operationForm.toFundName.trim() : undefined,
-    })
+    if (operationForm.type === 'buy') {
+      store.recordOperation({
+        type: 'buy',
+        fundCode: operationForm.fundCode,
+        fundName: operationForm.fundName,
+        amounts: { ...operationForm.amounts },
+      })
+    } else if (operationForm.type === 'sell') {
+      store.recordOperation({
+        type: 'sell',
+        fundCode: operationForm.fundCode,
+        fundName: operationForm.fundName,
+        shares: { ...operationForm.shares },
+      })
+    } else {
+      store.recordOperation({
+        type: 'convert',
+        fundCode: operationForm.fundCode,
+        fundName: operationForm.fundName,
+        shares: { ...operationForm.shares },
+        targetFund: {
+          code: operationForm.targetFund.code.trim(),
+          name: operationForm.targetFund.name.trim(),
+        },
+      })
+    }
 
     isOperationModalOpen.value = false
     await syncPortfolioWithNetWorth(true)

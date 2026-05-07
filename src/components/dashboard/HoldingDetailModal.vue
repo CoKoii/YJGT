@@ -19,6 +19,7 @@ import {
   filterTrendByRange,
   findNearestTrendPoint,
   getOperationLabel,
+  getOperationTargetFund,
   profitRate,
   toPerformanceTrend,
 } from '@/utils/calculations'
@@ -52,7 +53,8 @@ const relatedOperations = computed(() => {
   if (!props.holding) return []
   return props.operations.filter(
     (item) =>
-      item.fundCode === props.holding?.fundCode || item.toFundCode === props.holding?.fundCode,
+      item.fundCode === props.holding?.fundCode ||
+      getOperationTargetFund(item)?.code === props.holding?.fundCode,
   )
 })
 
@@ -77,7 +79,8 @@ function renderChart() {
   const chartPoints = isPerformanceMode ? toPerformanceTrend(trend) : trend
   const myRate = profitRate(props.holding.myAmount, props.holding.myProfit)
   const bloggerRate = profitRate(props.holding.bloggerAmount, props.holding.bloggerProfit)
-  const holdingStartDate = props.holding.myNavDate || props.holding.bloggerNavDate || chartPoints[0]?.date || ''
+  const holdingStartDate =
+    props.holding.myNavDate || props.holding.bloggerNavDate || chartPoints[0]?.date || ''
 
   const operationData = relatedOperations.value
     .map((item) => {

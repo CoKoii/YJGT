@@ -245,7 +245,6 @@ function updateAiConfigForm(value: AiConfig) {
       <OperationModal
         :open="isOperationModalOpen"
         :form="operationForm"
-        :format-number="formatNumber"
         :title="getOperationTitle()"
         @update:open="isOperationModalOpen = $event"
         @update:form="mergeState(operationForm, $event)"

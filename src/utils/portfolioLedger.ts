@@ -1,5 +1,12 @@
-import type { FundTrendPoint, Holding, HoldingOperation, InvestorSide } from '@/types'
+import type {
+  FundTrendPoint,
+  Holding,
+  HoldingOperation,
+  InvestorSide,
+  OperationSideValues,
+} from '@/types'
 import { formatDateKey } from '@/utils/date'
+import { getOperationTargetFund } from './calculations'
 
 type PositionKeys = {
   cost: 'myCost' | 'bloggerCost'
@@ -140,6 +147,17 @@ function applyBuy(holding: Holding, side: InvestorSide, amount: number, nav: num
   return nextHolding
 }
 
+function applyBuyValues(holding: Holding, amounts: OperationSideValues, nav: number) {
+  let nextHolding = holding
+  if (amounts.blogger > 0) {
+    nextHolding = applyBuy(nextHolding, 'blogger', amounts.blogger, nav)
+  }
+  if (amounts.mine > 0) {
+    nextHolding = applyBuy(nextHolding, 'mine', amounts.mine, nav)
+  }
+  return nextHolding
+}
+
 function applySellLike(
   holding: Holding,
   side: InvestorSide,
@@ -205,7 +223,7 @@ function canSettleOperation(operation: HoldingOperation, trends: TrendMap): bool
   if (!findTrendPoint(sourceTrend, operation.tradeDate)) return false
   if (operation.type !== 'convert') return true
 
-  const targetTrend = trends.get(operation.toFundCode ?? '') ?? []
+  const targetTrend = trends.get(operation.targetFund.code) ?? []
   return Boolean(findTrendPoint(targetTrend, operation.tradeDate))
 }
 
@@ -232,7 +250,8 @@ export function syncPortfolioLedger(
     if (operation.status === 'settled' || !canSettleOperation(operation, trends)) return operation
 
     const sourceTrend = trends.get(operation.fundCode) ?? []
-    const targetTrend = operation.toFundCode ? (trends.get(operation.toFundCode) ?? []) : []
+    const targetFund = getOperationTargetFund(operation)
+    const targetTrend = targetFund ? (trends.get(targetFund.code) ?? []) : []
     const sourceNav = findTrendPoint(sourceTrend, operation.tradeDate)?.value ?? 0
     const targetNav = findTrendPoint(targetTrend, operation.tradeDate)?.value ?? 0
     let sourceHolding = holdingsByFundCode.get(operation.fundCode)
@@ -246,24 +265,60 @@ export function syncPortfolioLedger(
       operation.tradeDate,
     )
 
-    let bloggerConvertedAmount = 0
-    if (operation.bloggerAmount > 0) {
-      bloggerConvertedAmount =
-        operation.type === 'convert' ? roundMoney(operation.bloggerAmount * sourceNav) : 0
-      sourceHolding =
-        operation.type === 'buy'
-          ? applyBuy(sourceHolding, 'blogger', operation.bloggerAmount, sourceNav)
-          : applySellLike(sourceHolding, 'blogger', operation.bloggerAmount, sourceNav)
-    }
+    if (operation.type === 'buy') {
+      sourceHolding = applyBuyValues(sourceHolding, operation.amounts, sourceNav)
+    } else {
+      const convertedAmounts = {
+        blogger: roundMoney(operation.shares.blogger * sourceNav),
+        mine: roundMoney(operation.shares.mine * sourceNav),
+      }
 
-    let myConvertedAmount = 0
-    if (operation.myAmount > 0) {
-      myConvertedAmount =
-        operation.type === 'convert' ? roundMoney(operation.myAmount * sourceNav) : 0
-      sourceHolding =
-        operation.type === 'buy'
-          ? applyBuy(sourceHolding, 'mine', operation.myAmount, sourceNav)
-          : applySellLike(sourceHolding, 'mine', operation.myAmount, sourceNav)
+      if (operation.shares.blogger > 0) {
+        sourceHolding = applySellLike(sourceHolding, 'blogger', operation.shares.blogger, sourceNav)
+      }
+
+      if (operation.shares.mine > 0) {
+        sourceHolding = applySellLike(sourceHolding, 'mine', operation.shares.mine, sourceNav)
+      }
+
+      holdingsByFundCode.set(operation.fundCode, {
+        ...sourceHolding,
+        updatedAt: new Date().toISOString(),
+      })
+
+      if (operation.type === 'convert') {
+        let targetHolding = ensureTargetHolding(
+          holdingsByFundCode,
+          operation.targetFund.code,
+          operation.targetFund.name,
+        )
+        targetHolding = advanceHoldingPosition(
+          targetHolding,
+          'mine',
+          targetTrend,
+          operation.tradeDate,
+        )
+        targetHolding = advanceHoldingPosition(
+          targetHolding,
+          'blogger',
+          targetTrend,
+          operation.tradeDate,
+        )
+        targetHolding = applyBuyValues(targetHolding, convertedAmounts, targetNav)
+
+        holdingsByFundCode.set(operation.targetFund.code, {
+          ...targetHolding,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+
+      return {
+        ...operation,
+        status: 'settled' as const,
+        settledAt: new Date().toISOString(),
+        settledFundNav: sourceNav,
+        settledTargetNav: operation.type === 'convert' ? targetNav : undefined,
+      }
     }
 
     holdingsByFundCode.set(operation.fundCode, {
@@ -271,45 +326,11 @@ export function syncPortfolioLedger(
       updatedAt: new Date().toISOString(),
     })
 
-    if (operation.type === 'convert' && operation.toFundCode && operation.toFundName) {
-      let targetHolding = ensureTargetHolding(
-        holdingsByFundCode,
-        operation.toFundCode,
-        operation.toFundName,
-      )
-      targetHolding = advanceHoldingPosition(
-        targetHolding,
-        'mine',
-        targetTrend,
-        operation.tradeDate,
-      )
-      targetHolding = advanceHoldingPosition(
-        targetHolding,
-        'blogger',
-        targetTrend,
-        operation.tradeDate,
-      )
-
-      if (operation.bloggerAmount > 0) {
-        targetHolding = applyBuy(targetHolding, 'blogger', bloggerConvertedAmount, targetNav)
-      }
-
-      if (operation.myAmount > 0) {
-        targetHolding = applyBuy(targetHolding, 'mine', myConvertedAmount, targetNav)
-      }
-
-      holdingsByFundCode.set(operation.toFundCode, {
-        ...targetHolding,
-        updatedAt: new Date().toISOString(),
-      })
-    }
-
     return {
       ...operation,
       status: 'settled' as const,
       settledAt: new Date().toISOString(),
       settledFundNav: sourceNav,
-      settledTargetNav: operation.type === 'convert' ? targetNav : undefined,
     }
   })
 

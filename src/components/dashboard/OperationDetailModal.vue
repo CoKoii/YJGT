@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import type { HoldingOperation } from '@/types'
+import {
+  getOperationSideValue,
+  getOperationTargetFund,
+  getOperationValueLabel,
+} from '@/utils/calculations'
 
 defineProps<{
   open: boolean
@@ -13,6 +18,16 @@ defineEmits<{
   (event: 'update:open', value: boolean): void
   (event: 'revoke', id: string): void
 }>()
+
+function formatOperationValue(
+  operation: HoldingOperation,
+  side: 'mine' | 'blogger',
+  formatMoney: (value: number) => string,
+  formatNumber: (value: number) => string,
+) {
+  const value = getOperationSideValue(operation, side)
+  return operation.type === 'buy' ? formatMoney(value) : `${formatNumber(value)} 份`
+}
 </script>
 
 <template>
@@ -37,22 +52,16 @@ defineEmits<{
             <a-descriptions-item label="基金">
               {{ operation.fundName }}（{{ operation.fundCode }}）
             </a-descriptions-item>
-            <a-descriptions-item v-if="operation.toFundName" label="转入基金">
-              {{ operation.toFundName }}（{{ operation.toFundCode }}）
+            <a-descriptions-item v-if="getOperationTargetFund(operation)" label="转入基金">
+              {{ getOperationTargetFund(operation)?.name }}（{{
+                getOperationTargetFund(operation)?.code
+              }}）
             </a-descriptions-item>
-            <a-descriptions-item :label="operation.type === 'buy' ? '博主金额' : '博主份额'">
-              {{
-                operation.type === 'buy'
-                  ? formatMoney(operation.bloggerAmount)
-                  : `${formatNumber(operation.bloggerAmount)} 份`
-              }}
+            <a-descriptions-item :label="`博主${getOperationValueLabel(operation.type)}`">
+              {{ formatOperationValue(operation, 'blogger', formatMoney, formatNumber) }}
             </a-descriptions-item>
-            <a-descriptions-item :label="operation.type === 'buy' ? '我的金额' : '我的份额'">
-              {{
-                operation.type === 'buy'
-                  ? formatMoney(operation.myAmount)
-                  : `${formatNumber(operation.myAmount)} 份`
-              }}
+            <a-descriptions-item :label="`我的${getOperationValueLabel(operation.type)}`">
+              {{ formatOperationValue(operation, 'mine', formatMoney, formatNumber) }}
             </a-descriptions-item>
             <a-descriptions-item label="记录时间">
               {{ new Date(operation.submittedAt).toLocaleString('zh-CN', { hour12: false }) }}

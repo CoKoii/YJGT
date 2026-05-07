@@ -4,6 +4,7 @@ import type {
   Holding,
   HoldingOperation,
   InvestorSide,
+  OperationSideValues,
   OperationType,
 } from '@/types'
 import { formatDateKey, normalizeDateKey, parseLocalDate } from '@/utils/date'
@@ -89,6 +90,22 @@ export function getOperationActionText(type: OperationType): string {
   return '买入'
 }
 
+export function getOperationValueLabel(type: OperationType): string {
+  return type === 'buy' ? '金额' : '份额'
+}
+
+export function getOperationSideValues(operation: HoldingOperation): OperationSideValues {
+  return operation.type === 'buy' ? operation.amounts : operation.shares
+}
+
+export function getOperationSideValue(operation: HoldingOperation, side: InvestorSide): number {
+  return getOperationSideValues(operation)[side]
+}
+
+export function getOperationTargetFund(operation: HoldingOperation) {
+  return operation.type === 'convert' ? operation.targetFund : null
+}
+
 export function getInvestorSideText(side: InvestorSide): string {
   return side === 'mine' ? '我的' : '博主'
 }
@@ -163,7 +180,7 @@ export function createHistoryDateKey() {
 }
 
 export function buildOperationFundCodes(operation: HoldingOperation): string[] {
-  return [operation.fundCode, operation.toFundCode].filter(
+  return [operation.fundCode, getOperationTargetFund(operation)?.code].filter(
     (fundCode): fundCode is string => Boolean(fundCode),
   )
 }

@@ -1,7 +1,19 @@
 import { fetchFundInfo, fetchFundNetWorthTrend, searchFundByName } from '@/services/fund'
-import type { AiChatMessage, AiConfig, FundTrendPoint, Holding, HoldingOperation, PortfolioTotals } from '@/types'
+import type {
+  AiChatMessage,
+  AiConfig,
+  FundTrendPoint,
+  Holding,
+  HoldingOperation,
+  PortfolioTotals,
+} from '@/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
+import {
+  getOperationSideValue,
+  getOperationTargetFund,
+  getOperationValueLabel,
+} from '@/utils/calculations'
 import { createAiModel, readAiTextContent } from './shared'
 
 const FUND_TOOLS: any[] = [
@@ -75,7 +87,14 @@ const PORTFOLIO_TOOLS: any[] = [
         properties: {
           sortBy: {
             type: 'string',
-            enum: ['myAmount', 'bloggerAmount', 'myProfit', 'bloggerProfit', 'myRate', 'bloggerRate'],
+            enum: [
+              'myAmount',
+              'bloggerAmount',
+              'myProfit',
+              'bloggerProfit',
+              'myRate',
+              'bloggerRate',
+            ],
             description: '排序字段。',
           },
           order: {
@@ -109,7 +128,8 @@ const PORTFOLIO_TOOLS: any[] = [
     type: 'function',
     function: {
       name: 'list_portfolio_operations',
-      description: '查询组合内的买入、卖出、转换记录，可按基金、状态、类型筛选。',
+      description:
+        '查询组合内的买入、卖出、转换记录，可按基金、状态、类型筛选。注意：buy 记录中的数值表示金额；sell 和 convert 记录中的数值表示份额。',
       parameters: {
         type: 'object',
         properties: {
@@ -133,6 +153,41 @@ const PORTFOLIO_TOOLS: any[] = [
     },
   },
 ]
+
+function formatOperationForAi(operation: HoldingOperation) {
+  const valueKind = operation.type === 'buy' ? 'amount' : 'shares'
+  const valueLabel = getOperationValueLabel(operation.type)
+  const valueUnit = operation.type === 'buy' ? 'CNY' : 'share'
+  const targetFund = getOperationTargetFund(operation)
+  const myValue = getOperationSideValue(operation, 'mine')
+  const bloggerValue = getOperationSideValue(operation, 'blogger')
+
+  return {
+    id: operation.id,
+    type: operation.type,
+    status: operation.status,
+    source: operation.source,
+    fundCode: operation.fundCode,
+    fundName: operation.fundName,
+    targetFund,
+    submittedAt: operation.submittedAt,
+    tradeDate: operation.tradeDate,
+    settledAt: operation.settledAt ?? null,
+    settledFundNav: operation.settledFundNav ?? null,
+    settledTargetNav: operation.settledTargetNav ?? null,
+    valueKind,
+    valueLabel,
+    valueUnit,
+    my: {
+      value: myValue,
+      [valueKind]: myValue,
+    },
+    blogger: {
+      value: bloggerValue,
+      [valueKind]: bloggerValue,
+    },
+  }
+}
 
 type PortfolioAiSnapshot = {
   budget: {
@@ -275,10 +330,7 @@ function normalizeLimit(value: unknown, fallback: number, max: number) {
   return Math.min(Math.floor(value), max)
 }
 
-function getHoldingSortValue(
-  holding: PortfolioAiSnapshot['holdings'][number],
-  sortBy: string,
-) {
+function getHoldingSortValue(holding: PortfolioAiSnapshot['holdings'][number], sortBy: string) {
   switch (sortBy) {
     case 'bloggerAmount':
       return holding.raw.bloggerAmount
@@ -296,7 +348,10 @@ function getHoldingSortValue(
   }
 }
 
-function pickHolding(snapshot: PortfolioAiSnapshot, args: { fundCode?: unknown; fundName?: unknown }) {
+function pickHolding(
+  snapshot: PortfolioAiSnapshot,
+  args: { fundCode?: unknown; fundName?: unknown },
+) {
   const fundCode = typeof args.fundCode === 'string' ? args.fundCode.trim() : ''
   const fundName = typeof args.fundName === 'string' ? args.fundName.trim() : ''
 
@@ -305,9 +360,11 @@ function pickHolding(snapshot: PortfolioAiSnapshot, args: { fundCode?: unknown; 
   }
 
   if (fundName) {
-    return snapshot.holdings.find(
-      (item) => item.fundName === fundName || item.fundName.includes(fundName),
-    ) ?? null
+    return (
+      snapshot.holdings.find(
+        (item) => item.fundName === fundName || item.fundName.includes(fundName),
+      ) ?? null
+    )
   }
 
   return null
@@ -326,8 +383,10 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
           totals: snapshot.totals,
           followRatio: snapshot.followRatio,
           holdingCount: snapshot.holdings.length,
-          pendingOperationCount: snapshot.operations.filter((item) => item.status === 'pending').length,
-          settledOperationCount: snapshot.operations.filter((item) => item.status === 'settled').length,
+          pendingOperationCount: snapshot.operations.filter((item) => item.status === 'pending')
+            .length,
+          settledOperationCount: snapshot.operations.filter((item) => item.status === 'settled')
+            .length,
         },
         null,
         2,
@@ -392,7 +451,11 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
       }
 
       const relatedOperations = snapshot.operations
-        .filter((item) => item.fundCode === holding.fundCode || item.toFundCode === holding.fundCode)
+        .filter(
+          (item) =>
+            item.fundCode === holding.fundCode ||
+            getOperationTargetFund(item)?.code === holding.fundCode,
+        )
         .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
 
       return JSON.stringify(
@@ -428,7 +491,7 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
               yesterdayProfit: holding.raw.bloggerYesterdayProfit,
             },
           },
-          relatedOperations,
+          relatedOperations: relatedOperations.map(formatOperationForAi),
         },
         null,
         2,
@@ -443,7 +506,11 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
       const limit = normalizeLimit(args.limit, 50, 200)
 
       const operations = snapshot.operations
-        .filter((item) => (fundCode ? item.fundCode === fundCode || item.toFundCode === fundCode : true))
+        .filter((item) =>
+          fundCode
+            ? item.fundCode === fundCode || getOperationTargetFund(item)?.code === fundCode
+            : true,
+        )
         .filter((item) => (status ? item.status === status : true))
         .filter((item) => (type ? item.type === type : true))
         .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
@@ -454,7 +521,7 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
           tool: toolCall.name,
           total: operations.length,
           returned: Math.min(limit, operations.length),
-          operations: operations.slice(0, limit),
+          operations: operations.slice(0, limit).map(formatOperationForAi),
         },
         null,
         2,
@@ -475,7 +542,11 @@ async function runPortfolioToolCall(toolCall: any, snapshot: PortfolioAiSnapshot
   }
 }
 
-async function resolveToolMessages(config: AiConfig, messages: any[], snapshot: PortfolioAiSnapshot) {
+async function resolveToolMessages(
+  config: AiConfig,
+  messages: any[],
+  snapshot: PortfolioAiSnapshot,
+) {
   const model = createAiModel(config, 0.2).bindTools([...FUND_TOOLS, ...PORTFOLIO_TOOLS], {
     tool_choice: 'auto',
   } as any)
@@ -488,18 +559,16 @@ async function resolveToolMessages(config: AiConfig, messages: any[], snapshot: 
     if (!assistantMessage.tool_calls?.length) return nextMessages
 
     const toolMessages = await Promise.all(
-      assistantMessage.tool_calls.map(
-        async (toolCall: any) => {
-          const content = PORTFOLIO_TOOLS.some((item) => item.function.name === toolCall.name)
-            ? await runPortfolioToolCall(toolCall, snapshot)
-            : await runFundToolCall(toolCall)
+      assistantMessage.tool_calls.map(async (toolCall: any) => {
+        const content = PORTFOLIO_TOOLS.some((item) => item.function.name === toolCall.name)
+          ? await runPortfolioToolCall(toolCall, snapshot)
+          : await runFundToolCall(toolCall)
 
-          return new ToolMessage({
-            tool_call_id: toolCall.id,
-            content,
-          })
-        },
-      ),
+        return new ToolMessage({
+          tool_call_id: toolCall.id,
+          content,
+        })
+      }),
     )
 
     nextMessages.push(...toolMessages)
@@ -523,7 +592,8 @@ export async function streamPortfolioChat({
     new SystemMessage(
       '你是一个基金跟投分析助手。关于用户自己的组合数据，不要依赖臆测，也不要假设系统消息里带了完整上下文；需要时主动调用组合工具查询。' +
         '当用户提到基金代码、基金名称、历史净值、净值走势、区间表现时，优先调用工具核实后再回答。' +
-        '如果数据不足，要明确说明，不要编造买入、卖出、转换记录。金额、比例、日期、份额、成本、待结算状态尽量引用工具返回的具体数值。',
+        '如果数据不足，要明确说明，不要编造买入、卖出、转换记录。金额、比例、日期、份额、成本、待结算状态尽量引用工具返回的具体数值。' +
+        '特别注意：操作记录里 buy 的数值是金额；sell 和 convert 的数值是份额。回答操作记录时必须使用工具返回的 valueLabel，不要把 sell 或 convert 说成金额。',
     ),
     ...messages.map((message) =>
       message.role === 'user' ? new HumanMessage(message.content) : new AIMessage(message.content),

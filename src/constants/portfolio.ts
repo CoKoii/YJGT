@@ -11,7 +11,7 @@ import type {
 export const FUND_CODE_PATTERN = /^\d{6}$/
 export const STORAGE_KEY = 'yjgt:portfolio'
 export const AI_CHAT_STORAGE_KEY = 'yjgt:ai-chat'
-export const PORTFOLIO_SCHEMA_VERSION = 2
+export const PORTFOLIO_SCHEMA_VERSION = 3
 export const HISTORY_LIMIT = 90
 export const OPERATION_LIMIT = 500
 

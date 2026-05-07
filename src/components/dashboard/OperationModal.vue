@@ -5,7 +5,6 @@ import type { InvestorSide, OperationFormModel } from '@/types'
 const props = defineProps<{
   open: boolean
   form: OperationFormModel
-  formatNumber: (value: number) => string
   title: string
 }>()
 
@@ -26,8 +25,8 @@ const AMOUNT_RATIOS = [
 ]
 
 const amountFields = [
-  { key: 'blogger', label: '博主金额', formKey: 'bloggerAmount' as const },
-  { key: 'mine', label: '我的金额', formKey: 'myAmount' as const },
+  { key: 'blogger', label: '博主金额', owner: 'blogger' as const },
+  { key: 'mine', label: '我的金额', owner: 'mine' as const },
 ]
 
 const amountFieldsForExit = computed(() => {
@@ -38,19 +37,43 @@ const amountFieldsForExit = computed(() => {
       key: 'blogger',
       owner: 'blogger' as const,
       label: `博主${actionText}份额`,
-      formKey: 'bloggerAmount' as const,
     },
     {
       key: 'mine',
       owner: 'mine' as const,
       label: `我的${actionText}份额`,
-      formKey: 'myAmount' as const,
     },
   ]
 })
 
-function updateFormField(field: keyof OperationFormModel, value: string | number) {
-  emit('update:form', { ...props.form, [field]: value })
+function updateAmount(owner: InvestorSide, value: number) {
+  emit('update:form', {
+    ...props.form,
+    amounts: {
+      ...props.form.amounts,
+      [owner]: value,
+    },
+  })
+}
+
+function updateShare(owner: InvestorSide, value: number) {
+  emit('update:form', {
+    ...props.form,
+    shares: {
+      ...props.form.shares,
+      [owner]: value,
+    },
+  })
+}
+
+function updateTargetFund(field: 'code' | 'name', value: string) {
+  emit('update:form', {
+    ...props.form,
+    targetFund: {
+      ...props.form.targetFund,
+      [field]: value,
+    },
+  })
 }
 </script>
 
@@ -72,12 +95,12 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
           <a-col v-for="item in amountFields" :key="item.key" :span="12">
             <a-form-item :label="item.label" class="operation-field">
               <a-input-number
-                :value="props.form[item.formKey]"
+                :value="props.form.amounts[item.owner]"
                 :min="0"
                 :precision="2"
                 class="operation-amount-input"
                 addon-before="¥"
-                @update:value="updateFormField(item.formKey, Number($event ?? 0))"
+                @update:value="updateAmount(item.owner, Number($event ?? 0))"
                 @change="item.key === 'blogger' ? emit('sync-my-amount') : undefined"
               />
             </a-form-item>
@@ -97,13 +120,13 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
                   </a-button>
                 </a-space>
                 <a-input-number
-                  :value="props.form[item.formKey]"
+                  :value="props.form.shares[item.owner]"
                   :min="0"
                   :precision="2"
                   addon-after="份"
                   placeholder="手动输入份额"
                   class="operation-share-input"
-                  @update:value="updateFormField(item.formKey, Number($event ?? 0))"
+                  @update:value="updateShare(item.owner, Number($event ?? 0))"
                 />
               </div>
             </a-form-item>
@@ -113,10 +136,10 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
           <a-col :span="12">
             <a-form-item label="转入基金代码" class="operation-field">
               <a-input
-                :value="props.form.toFundCode"
+                :value="props.form.targetFund.code"
                 :maxlength="6"
                 placeholder="输入 6 位基金代码"
-                @update:value="updateFormField('toFundCode', $event)"
+                @update:value="updateTargetFund('code', $event)"
                 @blur="emit('fill-target-name')"
                 @press-enter="emit('fill-target-name')"
               />
@@ -125,9 +148,9 @@ function updateFormField(field: keyof OperationFormModel, value: string | number
           <a-col :span="12">
             <a-form-item label="转入基金名称" class="operation-field">
               <a-input
-                :value="props.form.toFundName"
+                :value="props.form.targetFund.name"
                 placeholder="输入代码后自动带出，也可以手动填写"
-                @update:value="updateFormField('toFundName', $event)"
+                @update:value="updateTargetFund('name', $event)"
               />
             </a-form-item>
           </a-col>
