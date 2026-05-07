@@ -316,18 +316,30 @@ export function usePortfolioDashboard() {
         : 0
   }
 
+  function syncMyOperationShare() {
+    const baseHolding = selectedOperationHolding.value
+    if (!baseHolding) return
+
+    if (baseHolding.bloggerShares <= 0) {
+      operationForm.shares.mine = 0
+      return
+    }
+
+    const bloggerShareRatio = operationForm.shares.blogger / baseHolding.bloggerShares
+    operationForm.shares.mine = Number((baseHolding.myShares * bloggerShareRatio).toFixed(2))
+  }
+
   function setOperationAmountByRatio(owner: InvestorSide, amountRatio: number) {
     const baseHolding = selectedOperationHolding.value
     if (!baseHolding) return
 
-    const baseShares = owner === 'blogger' ? baseHolding.bloggerShares : baseHolding.myShares
-    const nextAmount = Number((baseShares * amountRatio).toFixed(2))
     if (owner === 'blogger') {
-      operationForm.shares.blogger = nextAmount
+      operationForm.shares.blogger = Number((baseHolding.bloggerShares * amountRatio).toFixed(2))
+      operationForm.shares.mine = Number((baseHolding.myShares * amountRatio).toFixed(2))
       return
     }
 
-    operationForm.shares.mine = nextAmount
+    operationForm.shares.mine = Number((baseHolding.myShares * amountRatio).toFixed(2))
   }
 
   async function fillOperationTargetFundName() {
@@ -679,6 +691,7 @@ export function usePortfolioDashboard() {
     saveSettings,
     sendAiChatMessage,
     setOperationAmountByRatio,
+    syncMyOperationShare,
     syncMyOperationAmount,
   }
 }

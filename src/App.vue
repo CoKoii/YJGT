@@ -105,6 +105,7 @@ const {
   shouldInvest,
   store,
   syncMyOperationAmount,
+  syncMyOperationShare,
   todayProfit,
   uploadedFiles,
   applyRecognized,
@@ -251,6 +252,7 @@ function updateAiConfigForm(value: AiConfig) {
         @update:form="mergeState(operationForm, $event)"
         @save="saveOperation"
         @sync-my-amount="syncMyOperationAmount"
+        @sync-my-share="syncMyOperationShare"
         @set-ratio="setOperationAmountByRatio"
         @fill-target-name="fillOperationTargetFundName"
       />

@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (event: 'update:form', value: OperationFormModel): void
   (event: 'save'): void
   (event: 'sync-my-amount'): void
+  (event: 'sync-my-share'): void
   (event: 'set-ratio', owner: InvestorSide, ratio: number): void
   (event: 'fill-target-name'): void
 }>()
@@ -127,6 +128,7 @@ function updateTargetFund(field: 'code' | 'name', value: string) {
                   placeholder="手动输入份额"
                   class="operation-share-input"
                   @update:value="updateShare(item.owner, Number($event ?? 0))"
+                  @change="item.owner === 'blogger' ? emit('sync-my-share') : undefined"
                 />
               </div>
             </a-form-item>
