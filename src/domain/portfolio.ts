@@ -98,8 +98,26 @@ function findPoint(points: FundNavPoint[], date: string): FundNavPoint | null {
   return points.find((point) => point.date === date) ?? null
 }
 
-function getSidePosition(position: PositionRecord | undefined, side: InvestorSide) {
-  return position?.[side] ?? { amount: 0, profit: 0 }
+function toDateKey(value: string | undefined): string {
+  if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : formatDateKey(date)
+}
+
+function minDateKey(dates: string[]): string {
+  return dates.filter(Boolean).sort()[0] ?? ''
+}
+
+function resolvePortfolioStartDate(state: PortfolioState): string {
+  return minDateKey([
+    ...state.operations.map((operation) => operation.tradeDate),
+    ...state.positions.flatMap((position) => [
+      toDateKey(position.updatedAt),
+      position.mine.navDate ?? '',
+      position.blogger.navDate ?? '',
+    ]),
+  ])
 }
 
 function inferState(seed: { amount: number; profit: number; nav?: number }, latestNav: number): SideState {
@@ -295,8 +313,9 @@ export function projectPortfolio(state: PortfolioState): PortfolioProjection {
       (item) =>
         item.myAmount > 0 || item.bloggerAmount > 0 || item.myShares > 0 || item.bloggerShares > 0,
     )
-  const history = buildPortfolioHistory(holdings, state.navHistory, state.budget)
-  const holdingHistory = buildHoldingHistory(holdings, state.navHistory)
+  const startDate = resolvePortfolioStartDate(state)
+  const history = buildPortfolioHistory(holdings, state.navHistory, state.budget, startDate)
+  const holdingHistory = buildHoldingHistory(holdings, state.navHistory, startDate)
 
   return {
     holdings,
@@ -311,10 +330,12 @@ export function buildPortfolioHistory(
   holdings: Holding[],
   navHistory: FundNavHistory[],
   _budget: BudgetConfig,
+  startDate = '',
 ): ProfitSnapshot[] {
   const navByFund = buildNavMap(navHistory)
   const dates = [...new Set(navHistory.flatMap((item) => item.points.map((point) => point.date)))]
     .sort()
+    .filter((date) => !startDate || date >= startDate)
     .slice(-90)
 
   return dates.map((date) => {
@@ -345,25 +366,29 @@ export function buildPortfolioHistory(
 export function buildHoldingHistory(
   holdings: Holding[],
   navHistory: FundNavHistory[],
+  startDate = '',
 ): HoldingProfitSnapshot[] {
   const navByFund = buildNavMap(navHistory)
   return holdings.flatMap((holding) =>
-    (navByFund.get(holding.fundCode) ?? []).slice(-365).map((point) => {
-      const myAmount = holding.myShares * point.value
-      const bloggerAmount = holding.bloggerShares * point.value
-      const myProfit = myAmount - holding.myCost
-      const bloggerProfit = bloggerAmount - holding.bloggerCost
-      return {
-        date: point.date,
-        fundCode: holding.fundCode,
-        myAmount: roundMoney(myAmount),
-        myProfit: roundMoney(myProfit),
-        myProfitRate: profitRate(myAmount, myProfit),
-        bloggerAmount: roundMoney(bloggerAmount),
-        bloggerProfit: roundMoney(bloggerProfit),
-        bloggerProfitRate: profitRate(bloggerAmount, bloggerProfit),
-      }
-    }),
+    (navByFund.get(holding.fundCode) ?? [])
+      .filter((point) => !startDate || point.date >= startDate)
+      .slice(-365)
+      .map((point) => {
+        const myAmount = holding.myShares * point.value
+        const bloggerAmount = holding.bloggerShares * point.value
+        const myProfit = myAmount - holding.myCost
+        const bloggerProfit = bloggerAmount - holding.bloggerCost
+        return {
+          date: point.date,
+          fundCode: holding.fundCode,
+          myAmount: roundMoney(myAmount),
+          myProfit: roundMoney(myProfit),
+          myProfitRate: profitRate(myAmount, myProfit),
+          bloggerAmount: roundMoney(bloggerAmount),
+          bloggerProfit: roundMoney(bloggerProfit),
+          bloggerProfitRate: profitRate(bloggerAmount, bloggerProfit),
+        }
+      }),
   )
 }
 
