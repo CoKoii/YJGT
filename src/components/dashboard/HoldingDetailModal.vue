@@ -7,7 +7,6 @@ import {
   DEFAULT_TREND_RANGE,
 } from '@/constants/portfolio'
 import { fetchFundNetWorthTrend } from '@/services/fund'
-import { buildHoldingPerformanceHistory } from '@/utils/portfolioLedger'
 import type {
   DetailChartMode,
   FundTrendPoint,
@@ -50,14 +49,9 @@ function getChartColor(name: string) {
 
 function createRateMap(
   storedHistory: HoldingProfitSnapshot[],
-  fallbackHistory: Array<{ date: string; rate: number | null }>,
   key: 'myProfitRate' | 'bloggerProfitRate',
 ) {
-  return new Map(
-    (storedHistory.length > 0
-      ? storedHistory.map((item) => [item.date, item[key]])
-      : fallbackHistory.map((item) => [item.date, item.rate])) as Array<[string, number | null]>,
-  )
+  return new Map(storedHistory.map((item) => [item.date, item[key]]))
 }
 
 const title = computed(() =>
@@ -98,24 +92,8 @@ function renderChart() {
     .filter((item) => item.fundCode === currentHolding.fundCode)
     .sort((left, right) => left.date.localeCompare(right.date))
   const settledOperations = relatedOperations.value.filter((item) => item.status === 'settled')
-  const fallbackMyHistory = buildHoldingPerformanceHistory(
-    currentHolding,
-    settledOperations,
-    trend,
-    'mine',
-  )
-  const fallbackBloggerHistory = buildHoldingPerformanceHistory(
-    currentHolding,
-    settledOperations,
-    trend,
-    'blogger',
-  )
-  const myRateByDate = createRateMap(storedHistory, fallbackMyHistory, 'myProfitRate')
-  const bloggerRateByDate = createRateMap(
-    storedHistory,
-    fallbackBloggerHistory,
-    'bloggerProfitRate',
-  )
+  const myRateByDate = createRateMap(storedHistory, 'myProfitRate')
+  const bloggerRateByDate = createRateMap(storedHistory, 'bloggerProfitRate')
   const mySeriesData = chartPoints.map((item) => myRateByDate.get(item.date) ?? null)
   const bloggerSeriesData = chartPoints.map((item) => bloggerRateByDate.get(item.date) ?? null)
 

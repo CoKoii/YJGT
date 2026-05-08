@@ -17,9 +17,10 @@ import type {
   HoldingOperationDraft,
   PortfolioState,
   PositionRecord,
+  ProfitSnapshot,
   RecognizedHolding,
 } from '@/types'
-import { createHistoryDateKey } from '@/utils/calculations'
+import { createHistoryDateKey, profitRate } from '@/utils/calculations'
 
 function nowText() {
   return new Date().toLocaleString('zh-CN', { hour12: false })
@@ -62,15 +63,23 @@ function positionsFromProjection(holdings: ReturnType<typeof projectPortfolio>['
       profit: holding.myProfit,
       nav: holding.myNav,
       navDate: holding.myNavDate,
+      startedAt: holding.myNavDate,
     },
     blogger: {
       amount: holding.bloggerAmount,
       profit: holding.bloggerProfit,
       nav: holding.bloggerNav,
       navDate: holding.bloggerNavDate,
+      startedAt: holding.bloggerNavDate,
     },
     updatedAt: nowIso(),
   }))
+}
+
+function compactSnapshots(items: ProfitSnapshot[]): ProfitSnapshot[] {
+  const byDate = new Map<string, ProfitSnapshot>()
+  items.forEach((item) => byDate.set(item.date, item))
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).slice(-365)
 }
 
 export const usePortfolioStore = defineStore('portfolio', () => {
@@ -81,6 +90,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const positions = ref<PositionRecord[]>(empty.positions)
   const operations = ref<HoldingOperation[]>(empty.operations)
   const navHistory = ref(empty.navHistory)
+  const snapshots = ref(empty.snapshots)
+  const holdingSnapshots = ref(empty.holdingSnapshots)
   const updatedAt = ref(empty.updatedAt)
   const isHydrated = ref(false)
 
@@ -92,6 +103,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     positions: positions.value,
     operations: operations.value,
     navHistory: navHistory.value,
+    snapshots: snapshots.value,
+    holdingSnapshots: holdingSnapshots.value,
     updatedAt: updatedAt.value,
   }))
   const projection = computed(() => projectPortfolio(sourceState.value))
@@ -110,6 +123,42 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
   function touch() {
     updatedAt.value = nowText()
+  }
+
+  function recordCurrentSnapshot() {
+    const nextProjection = projectPortfolio(sourceState.value)
+    const snapshotDate =
+      nextProjection.holdings
+        .map((holding) => holding.myNavDate || holding.bloggerNavDate)
+        .filter(Boolean)
+        .sort()
+        .at(-1) ?? createHistoryDateKey()
+
+    snapshots.value = compactSnapshots([
+      ...snapshots.value.filter((item) => item.date !== snapshotDate),
+      {
+        date: snapshotDate,
+        myProfit: nextProjection.totals.myProfit,
+        bloggerProfit: nextProjection.totals.bloggerProfit,
+        myProfitRate: nextProjection.totals.myProfitRate,
+        bloggerProfitRate: nextProjection.totals.bloggerProfitRate,
+      },
+    ])
+
+    const nextHoldingSnapshots = nextProjection.holdings.map((holding) => ({
+      date: snapshotDate,
+      fundCode: holding.fundCode,
+      myAmount: holding.myAmount,
+      myProfit: holding.myProfit,
+      myProfitRate: profitRate(holding.myAmount, holding.myProfit),
+      bloggerAmount: holding.bloggerAmount,
+      bloggerProfit: holding.bloggerProfit,
+      bloggerProfitRate: profitRate(holding.bloggerAmount, holding.bloggerProfit),
+    }))
+    holdingSnapshots.value = [
+      ...holdingSnapshots.value.filter((item) => item.date !== snapshotDate),
+      ...nextHoldingSnapshots,
+    ]
   }
 
   function setBudget(nextBudget: BudgetConfig) {
@@ -142,15 +191,18 @@ export const usePortfolioStore = defineStore('portfolio', () => {
         profit: payload.myProfit,
         nav: payload.myNav || latestNavForFund(navHistory.value, fundCode)?.value,
         navDate: payload.myNavDate || latestNavForFund(navHistory.value, fundCode)?.date,
+        startedAt: payload.myNavDate || createHistoryDateKey(),
       },
       blogger: {
         amount: payload.bloggerAmount,
         profit: payload.bloggerProfit,
         nav: payload.bloggerNav || latestNavForFund(navHistory.value, fundCode)?.value,
         navDate: payload.bloggerNavDate || latestNavForFund(navHistory.value, fundCode)?.date,
+        startedAt: payload.bloggerNavDate || createHistoryDateKey(),
       },
       updatedAt: nowIso(),
     })
+    recordCurrentSnapshot()
     touch()
   }
 
@@ -160,6 +212,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     funds.value = funds.value.filter((item) => item.code !== fundCode)
     positions.value = positions.value.filter((item) => item.fundCode !== fundCode)
     navHistory.value = navHistory.value.filter((item) => item.fundCode !== fundCode)
+    holdingSnapshots.value = holdingSnapshots.value.filter((item) => item.fundCode !== fundCode)
+    recordCurrentSnapshot()
     touch()
   }
 
@@ -186,12 +240,14 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       nextOperation,
     ].slice(-OPERATION_LIMIT)
     commitProjection()
+    recordCurrentSnapshot()
     touch()
   }
 
   function removeOperation(id: string) {
     operations.value = projectedOperations.value.filter((item) => item.id !== id)
     commitProjection()
+    recordCurrentSnapshot()
     touch()
   }
 
@@ -207,10 +263,12 @@ export const usePortfolioStore = defineStore('portfolio', () => {
           profit: row.profit,
           nav: latestNavForFund(navHistory.value, fundCode)?.value,
           navDate: latestNavForFund(navHistory.value, fundCode)?.date,
+          startedAt: latestNavForFund(navHistory.value, fundCode)?.date || createHistoryDateKey(),
         },
         updatedAt: nowIso(),
       })
     })
+    recordCurrentSnapshot()
     touch()
   }
 
@@ -223,6 +281,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   function setFundNavHistory(updates: Array<{ fundCode: string; points: FundNavPoint[] }>) {
     navHistory.value = mergeNavHistory(navHistory.value, updates)
     commitProjection()
+    recordCurrentSnapshot()
     touch()
   }
 
@@ -234,6 +293,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     positions.value = nextState.positions
     operations.value = nextState.operations
     navHistory.value = nextState.navHistory
+    snapshots.value = nextState.snapshots
+    holdingSnapshots.value = nextState.holdingSnapshots
     updatedAt.value = nextState.updatedAt
   }
 
@@ -249,12 +310,14 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     positions.value = persisted.positions
     operations.value = persisted.operations
     navHistory.value = persisted.navHistory
+    snapshots.value = persisted.snapshots
+    holdingSnapshots.value = persisted.holdingSnapshots
     updatedAt.value = persisted.updatedAt
     isHydrated.value = true
   }
 
   watch(
-    [budget, aiConfig, funds, positions, operations, navHistory, updatedAt],
+    [budget, aiConfig, funds, positions, operations, navHistory, snapshots, holdingSnapshots, updatedAt],
     () => {
       if (!isHydrated.value) return
       void savePortfolio(serialize()).catch((error) => {
@@ -271,6 +334,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     positions,
     operations: projectedOperations,
     navHistory,
+    snapshots,
+    holdingSnapshots,
     holdings,
     history,
     holdingHistory,

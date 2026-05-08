@@ -33,6 +33,8 @@ export function createEmptyPortfolioState(): PortfolioState {
     positions: [],
     operations: [],
     navHistory: [],
+    snapshots: [],
+    holdingSnapshots: [],
     updatedAt: '',
   }
 }

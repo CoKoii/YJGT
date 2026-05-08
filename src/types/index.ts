@@ -52,6 +52,7 @@ export type PositionSeed = {
   profit: number
   nav?: number
   navDate?: string
+  startedAt?: string
 }
 
 export type PositionRecord = {
@@ -202,6 +203,8 @@ export type PortfolioState = {
   positions: PositionRecord[]
   operations: HoldingOperation[]
   navHistory: FundNavHistory[]
+  snapshots: ProfitSnapshot[]
+  holdingSnapshots: HoldingProfitSnapshot[]
   updatedAt: string
 }
 

@@ -19,6 +19,7 @@ import { formatDateKey } from '@/utils/date'
 type SideState = {
   shares: number
   cost: number
+  startedAt: string
 }
 
 type LedgerFundState = {
@@ -31,6 +32,8 @@ type LegacyPortfolioState = Omit<PortfolioState, 'funds' | 'positions' | 'navHis
   funds?: FundRecord[]
   positions?: PositionRecord[]
   navHistory?: FundNavHistory[]
+  snapshots?: ProfitSnapshot[]
+  holdingSnapshots?: HoldingProfitSnapshot[]
   holdings?: Holding[]
   history?: ProfitSnapshot[]
   holdingHistory?: HoldingProfitSnapshot[]
@@ -105,27 +108,16 @@ function toDateKey(value: string | undefined): string {
   return Number.isNaN(date.getTime()) ? '' : formatDateKey(date)
 }
 
-function minDateKey(dates: string[]): string {
-  return dates.filter(Boolean).sort()[0] ?? ''
-}
-
-function resolvePortfolioStartDate(state: PortfolioState): string {
-  return minDateKey([
-    ...state.operations.map((operation) => operation.tradeDate),
-    ...state.positions.flatMap((position) => [
-      toDateKey(position.updatedAt),
-      position.mine.navDate ?? '',
-      position.blogger.navDate ?? '',
-    ]),
-  ])
-}
-
-function inferState(seed: { amount: number; profit: number; nav?: number }, latestNav: number): SideState {
+function stateFromRecordedPosition(
+  seed: { amount: number; profit: number; nav?: number; navDate?: string; startedAt?: string },
+  latestNav: number,
+): SideState {
   const nav = seed.nav && seed.nav > 0 ? seed.nav : latestNav
-  if (seed.amount <= 0 || nav <= 0) return { shares: 0, cost: 0 }
+  if (seed.amount <= 0 || nav <= 0) return { shares: 0, cost: 0, startedAt: '' }
   return {
     shares: seed.amount / nav,
     cost: Math.max(seed.amount - seed.profit, 0),
+    startedAt: toDateKey(seed.startedAt) || toDateKey(seed.navDate),
   }
 }
 
@@ -134,6 +126,7 @@ function applyBuy(state: SideState, amount: number, nav: number): SideState {
   return {
     shares: state.shares + amount / nav,
     cost: state.cost + amount,
+    startedAt: state.startedAt,
   }
 }
 
@@ -144,6 +137,7 @@ function applySell(state: SideState, shares: number): SideState {
   return {
     shares: Math.max(0, state.shares - reducedShares),
     cost: Math.max(0, state.cost - costToReduce),
+    startedAt: state.startedAt,
   }
 }
 
@@ -156,8 +150,8 @@ function ensureLedgerFund(states: Map<string, LedgerFundState>, code: string, na
 
   const state: LedgerFundState = {
     fund: { code, name },
-    mine: { shares: 0, cost: 0 },
-    blogger: { shares: 0, cost: 0 },
+    mine: { shares: 0, cost: 0, startedAt: '' },
+    blogger: { shares: 0, cost: 0, startedAt: '' },
   }
   states.set(code, state)
   return state
@@ -165,6 +159,28 @@ function ensureLedgerFund(states: Map<string, LedgerFundState>, code: string, na
 
 function buildNavMap(navHistory: FundNavHistory[]): Map<string, FundNavPoint[]> {
   return new Map(navHistory.map((item) => [item.fundCode, compactNavPoints(item.points)]))
+}
+
+function compactSnapshots(items: ProfitSnapshot[]): ProfitSnapshot[] {
+  const byDate = new Map<string, ProfitSnapshot>()
+  items
+    .filter((item) => toDateKey(item.date))
+    .forEach((item) => byDate.set(item.date, { ...item, date: toDateKey(item.date) }))
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).slice(-365)
+}
+
+function compactHoldingSnapshots(items: HoldingProfitSnapshot[]): HoldingProfitSnapshot[] {
+  const byFundDate = new Map<string, HoldingProfitSnapshot>()
+  items
+    .filter((item) => item.fundCode && toDateKey(item.date))
+    .forEach((item) => {
+      const date = toDateKey(item.date)
+      byFundDate.set(`${item.fundCode}:${date}`, { ...item, date })
+    })
+  return [...byFundDate.values()].sort((left, right) => {
+    if (left.date === right.date) return left.fundCode.localeCompare(right.fundCode)
+    return left.date.localeCompare(right.date)
+  })
 }
 
 function seedLedgerState(state: PortfolioState, navByFund: Map<string, FundNavPoint[]>) {
@@ -176,8 +192,8 @@ function seedLedgerState(state: PortfolioState, navByFund: Map<string, FundNavPo
     const nav = latestPoint(navByFund.get(position.fundCode) ?? [])?.value ?? 0
     ledger.set(position.fundCode, {
       fund,
-      mine: inferState(position.mine, nav),
-      blogger: inferState(position.blogger, nav),
+      mine: stateFromRecordedPosition(position.mine, nav),
+      blogger: stateFromRecordedPosition(position.blogger, nav),
     })
   })
 
@@ -207,7 +223,11 @@ function buildLedgerProjection(state: PortfolioState) {
 
     if (operation.type === 'buy') {
       SIDES.forEach((side) => {
-        source[side] = applyBuy(source[side], operation.amounts[side], sourceNav)
+        const nextState = applyBuy(source[side], operation.amounts[side], sourceNav)
+        source[side] = {
+          ...nextState,
+          startedAt: nextState.startedAt || operation.tradeDate,
+        }
       })
       return {
         ...operation,
@@ -226,7 +246,11 @@ function buildLedgerProjection(state: PortfolioState) {
         findPoint(navByFund.get(operation.targetFund.code) ?? [], operation.tradeDate)?.value ?? 0
       const target = ensureLedgerFund(ledger, operation.targetFund.code, operation.targetFund.name)
       SIDES.forEach((side) => {
-        target[side] = applyBuy(target[side], operation.shares[side] * sourceNav, targetNav)
+        const nextState = applyBuy(target[side], operation.shares[side] * sourceNav, targetNav)
+        target[side] = {
+          ...nextState,
+          startedAt: nextState.startedAt || operation.tradeDate,
+        }
       })
       return {
         ...operation,
@@ -253,7 +277,12 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
   const previous = latest ? previousPoint(navPoints, latest.date) : null
   const nav = latest?.value ?? 0
   const navDate = latest?.date ?? ''
-  const previousNav = previous?.value ?? nav
+  const myPreviousNav =
+    previous && (!state.mine.startedAt || state.mine.startedAt <= previous.date) ? previous.value : nav
+  const bloggerPreviousNav =
+    previous && (!state.blogger.startedAt || state.blogger.startedAt <= previous.date)
+      ? previous.value
+      : nav
   const myAmount = roundMoney(state.mine.shares * nav)
   const bloggerAmount = roundMoney(state.blogger.shares * nav)
 
@@ -267,14 +296,14 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
     myNavDate: navDate,
     myAmount,
     myProfit: roundMoney(myAmount - state.mine.cost),
-    myYesterdayProfit: roundMoney(state.mine.shares * (nav - previousNav)),
+    myYesterdayProfit: roundMoney(state.mine.shares * (nav - myPreviousNav)),
     bloggerCost: roundMoney(state.blogger.cost),
     bloggerShares: roundShares(state.blogger.shares),
     bloggerNav: nav,
     bloggerNavDate: navDate,
     bloggerAmount,
     bloggerProfit: roundMoney(bloggerAmount - state.blogger.cost),
-    bloggerYesterdayProfit: roundMoney(state.blogger.shares * (nav - previousNav)),
+    bloggerYesterdayProfit: roundMoney(state.blogger.shares * (nav - bloggerPreviousNav)),
     updatedAt: new Date().toISOString(),
   }
 }
@@ -313,9 +342,8 @@ export function projectPortfolio(state: PortfolioState): PortfolioProjection {
       (item) =>
         item.myAmount > 0 || item.bloggerAmount > 0 || item.myShares > 0 || item.bloggerShares > 0,
     )
-  const startDate = resolvePortfolioStartDate(state)
-  const history = buildPortfolioHistory(holdings, state.navHistory, state.budget, startDate)
-  const holdingHistory = buildHoldingHistory(holdings, state.navHistory, startDate)
+  const history = compactSnapshots(state.snapshots)
+  const holdingHistory = compactHoldingSnapshots(state.holdingSnapshots)
 
   return {
     holdings,
@@ -324,72 +352,6 @@ export function projectPortfolio(state: PortfolioState): PortfolioProjection {
     holdingHistory,
     totals: computeTotals(holdings),
   }
-}
-
-export function buildPortfolioHistory(
-  holdings: Holding[],
-  navHistory: FundNavHistory[],
-  _budget: BudgetConfig,
-  startDate = '',
-): ProfitSnapshot[] {
-  const navByFund = buildNavMap(navHistory)
-  const dates = [...new Set(navHistory.flatMap((item) => item.points.map((point) => point.date)))]
-    .sort()
-    .filter((date) => !startDate || date >= startDate)
-    .slice(-90)
-
-  return dates.map((date) => {
-    let myAmount = 0
-    let bloggerAmount = 0
-    let myProfit = 0
-    let bloggerProfit = 0
-
-    holdings.forEach((holding) => {
-      const point = findPoint(navByFund.get(holding.fundCode) ?? [], date)
-      if (!point) return
-      myAmount += holding.myShares * point.value
-      bloggerAmount += holding.bloggerShares * point.value
-      myProfit += holding.myShares * point.value - holding.myCost
-      bloggerProfit += holding.bloggerShares * point.value - holding.bloggerCost
-    })
-
-    return {
-      date,
-      myProfit: roundMoney(myProfit),
-      bloggerProfit: roundMoney(bloggerProfit),
-      myProfitRate: profitRate(myAmount, myProfit),
-      bloggerProfitRate: profitRate(bloggerAmount, bloggerProfit),
-    }
-  })
-}
-
-export function buildHoldingHistory(
-  holdings: Holding[],
-  navHistory: FundNavHistory[],
-  startDate = '',
-): HoldingProfitSnapshot[] {
-  const navByFund = buildNavMap(navHistory)
-  return holdings.flatMap((holding) =>
-    (navByFund.get(holding.fundCode) ?? [])
-      .filter((point) => !startDate || point.date >= startDate)
-      .slice(-365)
-      .map((point) => {
-        const myAmount = holding.myShares * point.value
-        const bloggerAmount = holding.bloggerShares * point.value
-        const myProfit = myAmount - holding.myCost
-        const bloggerProfit = bloggerAmount - holding.bloggerCost
-        return {
-          date: point.date,
-          fundCode: holding.fundCode,
-          myAmount: roundMoney(myAmount),
-          myProfit: roundMoney(myProfit),
-          myProfitRate: profitRate(myAmount, myProfit),
-          bloggerAmount: roundMoney(bloggerAmount),
-          bloggerProfit: roundMoney(bloggerProfit),
-          bloggerProfitRate: profitRate(bloggerAmount, bloggerProfit),
-        }
-      }),
-  )
 }
 
 export function normalizePortfolioState(input: LegacyPortfolioState | null | undefined): PortfolioState {
@@ -420,12 +382,14 @@ export function normalizePortfolioState(input: LegacyPortfolioState | null | und
         profit: holding.myProfit,
         nav: holding.myNav,
         navDate: holding.myNavDate,
+        startedAt: holding.myNavDate || toDateKey(holding.updatedAt),
       },
       blogger: {
         amount: holding.bloggerAmount,
         profit: holding.bloggerProfit,
         nav: holding.bloggerNav,
         navDate: holding.bloggerNavDate,
+        startedAt: holding.bloggerNavDate || toDateKey(holding.updatedAt),
       },
       updatedAt: holding.updatedAt || now,
     })
@@ -461,6 +425,8 @@ export function normalizePortfolioState(input: LegacyPortfolioState | null | und
     positions: [...positionByFund.values()],
     operations: input?.operations ?? [],
     navHistory,
+    snapshots: compactSnapshots(input?.snapshots ?? input?.history ?? []),
+    holdingSnapshots: compactHoldingSnapshots(input?.holdingSnapshots ?? input?.holdingHistory ?? []),
     updatedAt: input?.updatedAt ?? formatDateKey(new Date()),
   }
 }
