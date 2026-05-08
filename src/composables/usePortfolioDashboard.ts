@@ -33,7 +33,7 @@ import { formatDateKey } from '@/utils/date'
 import { downloadText, readImageDataUrl } from '@/utils/file'
 import { syncPortfolioLedger } from '@/utils/portfolioLedger'
 import { message, Modal } from 'ant-design-vue'
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 function createOperationForm(): OperationFormModel {
   return {
@@ -84,8 +84,6 @@ export function usePortfolioDashboard() {
   const budgetForm = reactive({ ...store.budget })
   const aiConfigForm = reactive({ ...store.aiConfig })
 
-  const todayDateKey = formatDateKey(new Date())
-
   const selectedHolding = computed(() => {
     return (
       store.holdings.find((item) => item.id === selectedHoldingId.value) ??
@@ -125,14 +123,33 @@ export function usePortfolioDashboard() {
     return operationsByFundCode
   })
 
+  const latestNavDates = computed(() => {
+    return store.holdings.reduce(
+      (summary, holding) => ({
+        mine:
+          holding.myNavDate && holding.myNavDate > summary.mine ? holding.myNavDate : summary.mine,
+        blogger:
+          holding.bloggerNavDate && holding.bloggerNavDate > summary.blogger
+            ? holding.bloggerNavDate
+            : summary.blogger,
+      }),
+      { mine: '', blogger: '' },
+    )
+  })
+
   const holdingRows = computed<HoldingRow[]>(() =>
     store.holdings.map((holding) => {
       const myInvested = actualInvested(holding.myAmount, holding.myProfit)
       const bloggerInvested = actualInvested(holding.bloggerAmount, holding.bloggerProfit)
       const targetInvested = ratio.value.blogger > 0 ? bloggerInvested / ratio.value.blogger : 0
-      const myDailyProfit = holding.myNavDate === todayDateKey ? holding.myYesterdayProfit : null
+      const myDailyProfit =
+        holding.myNavDate && holding.myNavDate === latestNavDates.value.mine
+          ? holding.myYesterdayProfit
+          : null
       const bloggerDailyProfit =
-        holding.bloggerNavDate === todayDateKey ? holding.bloggerYesterdayProfit : null
+        holding.bloggerNavDate && holding.bloggerNavDate === latestNavDates.value.blogger
+          ? holding.bloggerYesterdayProfit
+          : null
 
       return {
         ...holding,
@@ -628,17 +645,12 @@ export function usePortfolioDashboard() {
 
   watch(aiSide, resetAiRecognition)
 
-  watch(
-    () => store.isHydrated,
-    (isHydrated) => {
-      if (!isHydrated) return
-      if (!selectedHoldingId.value) {
-        selectedHoldingId.value = store.holdings[0]?.id ?? null
-      }
-      void syncPortfolioWithNetWorth()
-    },
-    { immediate: true },
-  )
+  onMounted(() => {
+    if (!selectedHoldingId.value) {
+      selectedHoldingId.value = store.holdings[0]?.id ?? null
+    }
+    void syncPortfolioWithNetWorth()
+  })
 
   return {
     store,

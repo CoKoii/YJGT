@@ -12,6 +12,17 @@ declare global {
 
 type ScoredFundInfo = FundInfo & { score: number }
 
+let fundScriptQueue = Promise.resolve()
+
+function runFundScriptTask<T>(task: () => Promise<T>): Promise<T> {
+  const nextTask = fundScriptQueue.then(task, task)
+  fundScriptQueue = nextTask.then(
+    () => undefined,
+    () => undefined,
+  )
+  return nextTask
+}
+
 function formatLocalDate(timestamp: number) {
   const date = new Date(timestamp)
   const year = date.getFullYear()
@@ -163,32 +174,35 @@ export async function fetchFundInfo(fundCode: string) {
   const code = fundCode.trim()
   if (!/^\d{6}$/.test(code)) return null
 
-  return new Promise<FundInfo | null>((resolve) => {
-    const previousCallback = window.jsonpgz
-    const timeout = window.setTimeout(() => {
-      restoreWindowValue('jsonpgz', previousCallback)
-      resolve(null)
-    }, 8000)
-
-    window.jsonpgz = (payload: any) => {
-      window.clearTimeout(timeout)
-      restoreWindowValue('jsonpgz', previousCallback)
-      resolve(
-        payload.fundcode && payload.name ? { code: payload.fundcode, name: payload.name } : null,
-      )
-    }
-
-    void loadScript(`https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`).then(
-      (script) => {
-        script?.remove()
-        if (!script) {
-          window.clearTimeout(timeout)
+  return runFundScriptTask(
+    () =>
+      new Promise<FundInfo | null>((resolve) => {
+        const previousCallback = window.jsonpgz
+        const timeout = window.setTimeout(() => {
           restoreWindowValue('jsonpgz', previousCallback)
           resolve(null)
+        }, 8000)
+
+        window.jsonpgz = (payload: any) => {
+          window.clearTimeout(timeout)
+          restoreWindowValue('jsonpgz', previousCallback)
+          resolve(
+            payload.fundcode && payload.name ? { code: payload.fundcode, name: payload.name } : null,
+          )
         }
-      },
-    )
-  })
+
+        void loadScript(`https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`).then(
+          (script) => {
+            script?.remove()
+            if (!script) {
+              window.clearTimeout(timeout)
+              restoreWindowValue('jsonpgz', previousCallback)
+              resolve(null)
+            }
+          },
+        )
+      }),
+  )
 }
 
 export async function searchFundByName(fundName: string) {
@@ -214,21 +228,23 @@ export async function fetchFundNetWorthTrend(fundCode: string): Promise<FundTren
   const code = fundCode.trim()
   if (!/^\d{6}$/.test(code)) return []
 
-  const previousName = window.fS_name
-  const previousCode = window.fS_code
-  const previousTrend = window.Data_netWorthTrend
-  const script = await loadScript(
-    `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${Date.now()}`,
-  )
-  const list = window.Data_netWorthTrend ?? []
+  return runFundScriptTask(async () => {
+    const previousName = window.fS_name
+    const previousCode = window.fS_code
+    const previousTrend = window.Data_netWorthTrend
+    const script = await loadScript(
+      `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${Date.now()}`,
+    )
+    const list = window.Data_netWorthTrend ?? []
 
-  script?.remove()
-  restoreWindowValue('fS_name', previousName)
-  restoreWindowValue('fS_code', previousCode)
-  restoreWindowValue('Data_netWorthTrend', previousTrend)
+    script?.remove()
+    restoreWindowValue('fS_name', previousName)
+    restoreWindowValue('fS_code', previousCode)
+    restoreWindowValue('Data_netWorthTrend', previousTrend)
 
-  return list.map((item: any) => ({
-    date: formatLocalDate(item.x),
-    value: item.y,
-  }))
+    return list.map((item: any) => ({
+      date: formatLocalDate(item.x),
+      value: item.y,
+    }))
+  })
 }

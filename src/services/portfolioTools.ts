@@ -30,6 +30,10 @@ type PortfolioHoldingView = {
 type PortfolioQuerySnapshot = {
   budget: PortfolioState['budget']
   totals: PortfolioTotals
+  latestNavDates: {
+    mine: string
+    blogger: string
+  }
   followRatio: {
     blogger: number
     mine: number
@@ -210,10 +214,15 @@ function pickHolding(snapshot: PortfolioQuerySnapshot, args: { fundCode?: unknow
 async function loadPortfolioSnapshot(): Promise<PortfolioQuerySnapshot> {
   const state = await loadPortfolio()
   const totals = computeTotals(state.holdings)
+  const latestNavDates = {
+    mine: findLatestNavDate(state.holdings, 'myNavDate'),
+    blogger: findLatestNavDate(state.holdings, 'bloggerNavDate'),
+  }
 
   return {
     budget: state.budget,
     totals,
+    latestNavDates,
     followRatio: followRatio(state.budget),
     holdings: buildHoldingsView(state, totals),
     operations: state.operations.map((item) => ({ ...item })),
@@ -229,6 +238,17 @@ export async function getPortfolioSummaryTool() {
     tool: 'get_portfolio_summary',
     budget: snapshot.budget,
     totals: snapshot.totals,
+    latestNavDates: snapshot.latestNavDates,
+    latestDailyProfit: {
+      mine: {
+        amount: snapshot.totals.myYesterdayProfit,
+        navDate: snapshot.latestNavDates.mine || null,
+      },
+      blogger: {
+        amount: snapshot.totals.bloggerYesterdayProfit,
+        navDate: snapshot.latestNavDates.blogger || null,
+      },
+    },
     followRatio: snapshot.followRatio,
     holdingCount: snapshot.holdings.length,
     pendingOperationCount: snapshot.operations.filter((item) => item.status === 'pending').length,
@@ -271,6 +291,7 @@ export async function listPortfolioHoldingsTool(args: {
         shares: item.raw.myShares,
         cost: item.raw.myCost,
         nav: item.raw.myNav,
+        navDate: item.raw.myNavDate,
         yesterdayProfit: item.raw.myYesterdayProfit,
       },
       blogger: {
@@ -282,6 +303,7 @@ export async function listPortfolioHoldingsTool(args: {
         shares: item.raw.bloggerShares,
         cost: item.raw.bloggerCost,
         nav: item.raw.bloggerNav,
+        navDate: item.raw.bloggerNavDate,
         yesterdayProfit: item.raw.bloggerYesterdayProfit,
       },
     })),
@@ -320,6 +342,7 @@ export async function getHoldingDetailTool(args: { fundCode?: unknown; fundName?
         shares: holding.raw.myShares,
         cost: holding.raw.myCost,
         nav: holding.raw.myNav,
+        navDate: holding.raw.myNavDate,
         yesterdayProfit: holding.raw.myYesterdayProfit,
       },
       blogger: {
@@ -331,6 +354,7 @@ export async function getHoldingDetailTool(args: { fundCode?: unknown; fundName?
         shares: holding.raw.bloggerShares,
         cost: holding.raw.bloggerCost,
         nav: holding.raw.bloggerNav,
+        navDate: holding.raw.bloggerNavDate,
         yesterdayProfit: holding.raw.bloggerYesterdayProfit,
       },
     },

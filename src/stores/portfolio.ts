@@ -28,6 +28,12 @@ function findLatestNavDate(
   }, '')
 }
 
+function resolveSnapshotDate(items: Holding[]): string {
+  const latestMyNavDate = findLatestNavDate(items, 'myNavDate')
+  const latestBloggerNavDate = findLatestNavDate(items, 'bloggerNavDate')
+  return [latestMyNavDate, latestBloggerNavDate].filter(Boolean).sort().at(-1) ?? createHistoryDateKey()
+}
+
 function compactHistory(items: ProfitSnapshot[]): ProfitSnapshot[] {
   const latestByDate = new Map<string, ProfitSnapshot>()
   items.forEach((item) => latestByDate.set(item.date, item))
@@ -168,8 +174,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   }
 
   function recordSnapshot() {
+    const snapshotDate = resolveSnapshotDate(holdings.value)
     const snapshot: ProfitSnapshot = {
-      date: createHistoryDateKey(),
+      date: snapshotDate,
       myProfit: totals.value.myProfit,
       bloggerProfit: totals.value.bloggerProfit,
       myProfitRate: totals.value.myProfitRate,
@@ -183,7 +190,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
     const holdingSnapshots = holdings.value
       .filter((holding) => holding.myAmount > 0 || holding.bloggerAmount > 0)
-      .map((holding) => createHoldingSnapshot(snapshot.date, holding))
+      .map((holding) => createHoldingSnapshot(snapshotDate, holding))
 
     const remainingHistory = holdingHistory.value.filter((item) => item.date !== snapshot.date)
     holdingHistory.value = compactHoldingHistory([...remainingHistory, ...holdingSnapshots])

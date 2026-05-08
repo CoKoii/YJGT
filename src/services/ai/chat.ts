@@ -341,7 +341,9 @@ export async function streamPortfolioChat({
       '你是一个基金跟投分析助手。关于用户自己的组合数据，不要依赖臆测，也不要假设系统消息里带了完整上下文；需要时主动调用组合工具查询。' +
         '当用户提到基金代码、基金名称、历史净值、净值走势、区间表现时，优先调用工具核实后再回答。' +
         '如果数据不足，要明确说明，不要编造买入、卖出、转换记录。金额、比例、日期、份额、成本、待结算状态尽量引用工具返回的具体数值。' +
-        '特别注意：操作记录里 buy 的数值是金额；sell 和 convert 的数值是份额。回答操作记录时必须使用工具返回的 valueLabel，不要把 sell 或 convert 说成金额。',
+        '特别注意：操作记录里 buy 的数值是金额；sell 和 convert 的数值是份额。回答操作记录时必须使用工具返回的 valueLabel，不要把 sell 或 convert 说成金额。' +
+        '当用户问“昨天收益”“今天收益”“哪一天更新”“5月8号还有没有更新”这类日期问题时，必须先看工具返回的 navDate、latestNavDates 或 latestDailyProfit.navDate，再用明确日期回答。' +
+        '“最新单日收益”只代表最新净值日对应的单日收益，不等于自然日意义上的昨天，除非日期字段明确一致。',
     ),
     ...messages.map((message) =>
       message.role === 'user' ? new HumanMessage(message.content) : new AIMessage(message.content),
