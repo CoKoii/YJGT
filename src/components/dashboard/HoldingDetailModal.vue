@@ -94,8 +94,12 @@ function renderChart() {
   const settledOperations = relatedOperations.value.filter((item) => item.status === 'settled')
   const myRateByDate = createRateMap(storedHistory, 'myProfitRate')
   const bloggerRateByDate = createRateMap(storedHistory, 'bloggerProfitRate')
-  const mySeriesData = chartPoints.map((item) => myRateByDate.get(item.date) ?? null)
-  const bloggerSeriesData = chartPoints.map((item) => bloggerRateByDate.get(item.date) ?? null)
+  const mySnapshotData = storedHistory
+    .filter((item) => myRateByDate.has(item.date))
+    .map((item) => [item.date, myRateByDate.get(item.date)] as [string, number])
+  const bloggerSnapshotData = storedHistory
+    .filter((item) => bloggerRateByDate.has(item.date))
+    .map((item) => [item.date, bloggerRateByDate.get(item.date)] as [string, number])
 
   const operationData = relatedOperations.value
     .flatMap((item) => {
@@ -154,21 +158,19 @@ function renderChart() {
           color: getChartColor('--text-muted'),
         },
         {
-          name: '我的收益率',
-          type: 'line',
-          smooth: true,
-          connectNulls: false,
+          name: '我的收益率快照',
+          type: 'scatter',
+          symbolSize: 10,
           showSymbol: true,
-          data: mySeriesData,
+          data: mySnapshotData,
           color: brandColor,
         },
         {
-          name: '博主收益率',
-          type: 'line',
-          smooth: true,
-          connectNulls: false,
+          name: '博主收益率快照',
+          type: 'scatter',
+          symbolSize: 10,
           showSymbol: true,
-          data: bloggerSeriesData,
+          data: bloggerSnapshotData,
           color: BLOGGER_COLOR,
         },
         ...operationSeries,
@@ -209,7 +211,11 @@ function renderChart() {
               const value = Array.isArray(data.value) ? data.value.at(-1) : data.value
               const suffix =
                 data.seriesName?.includes('收益率') || data.seriesName === '业绩走势' ? '%' : ''
-              const formattedValue = typeof value === 'number' ? value.toFixed(2) : value
+              const numericValue = typeof value === 'string' ? Number(value) : value
+              const formattedValue =
+                typeof numericValue === 'number' && Number.isFinite(numericValue)
+                  ? numericValue.toFixed(2)
+                  : value
               return `${data.marker ?? ''}${data.seriesName ?? ''}: ${formattedValue ?? ''}${suffix}`
             })
             .join('<br/>')
@@ -217,7 +223,7 @@ function renderChart() {
       },
       legend: {
         top: 0,
-        data: isPerformanceMode ? ['业绩走势', '我的收益率', '博主收益率'] : ['基金净值'],
+        data: isPerformanceMode ? ['业绩走势', '我的收益率快照', '博主收益率快照'] : ['基金净值'],
       },
       grid: { left: 48, right: 48, top: 48, bottom: 42, containLabel: true },
       xAxis: {
