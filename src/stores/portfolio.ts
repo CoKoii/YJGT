@@ -114,6 +114,10 @@ function createHoldingFromRecognition(side: 'mine' | 'blogger', data: Recognized
       }
 }
 
+function toPersistedState(state: PortfolioState): PortfolioState {
+  return JSON.parse(JSON.stringify(state)) as PortfolioState
+}
+
 export const usePortfolioStore = defineStore('portfolio', () => {
   const empty = createEmptyPortfolioState()
   const budget = ref<BudgetConfig>(empty.budget)
@@ -162,7 +166,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   })
 
   function serialize(): PortfolioState {
-    return {
+    return toPersistedState({
       budget: budget.value,
       aiConfig: aiConfig.value,
       holdings: holdings.value,
@@ -170,7 +174,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       history: history.value,
       holdingHistory: holdingHistory.value,
       updatedAt: updatedAt.value,
-    }
+    })
   }
 
   function recordSnapshot() {
@@ -307,7 +311,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     [budget, aiConfig, holdings, operations, history, holdingHistory, updatedAt],
     () => {
       if (!isHydrated.value) return
-      void savePortfolio(serialize())
+      void savePortfolio(serialize()).catch((error) => {
+        console.error('保存组合数据失败:', error)
+      })
     },
     { deep: true },
   )

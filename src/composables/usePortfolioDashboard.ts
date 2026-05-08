@@ -73,6 +73,7 @@ export function usePortfolioDashboard() {
   const isChatStreaming = ref(false)
   const isFundInfoLoading = ref(false)
   const isSyncingNetWorth = ref(false)
+  const isInitialSyncing = ref(true)
   const uploadedFiles = ref<UploadedFileMeta[]>([])
   const uploadedImageDataUrls = ref<Record<string, string>>({})
   const recognizedRows = ref<RecognizedHolding[]>([])
@@ -173,18 +174,20 @@ export function usePortfolioDashboard() {
   )
 
   const todayProfit = computed(() =>
-    holdingRows.value.reduce(
-      (summary, row) => {
-        if (row.myDailyProfit !== null) {
-          summary.mine = (summary.mine ?? 0) + row.myDailyProfit
-        }
-        if (row.bloggerDailyProfit !== null) {
-          summary.blogger = (summary.blogger ?? 0) + row.bloggerDailyProfit
-        }
-        return summary
-      },
-      { mine: null as number | null, blogger: null as number | null },
-    ),
+    isInitialSyncing.value
+      ? { mine: null as number | null, blogger: null as number | null }
+      : holdingRows.value.reduce(
+          (summary, row) => {
+            if (row.myDailyProfit !== null) {
+              summary.mine = (summary.mine ?? 0) + row.myDailyProfit
+            }
+            if (row.bloggerDailyProfit !== null) {
+              summary.blogger = (summary.blogger ?? 0) + row.bloggerDailyProfit
+            }
+            return summary
+          },
+          { mine: null as number | null, blogger: null as number | null },
+        ),
   )
 
   const recognizedSummary = computed(() =>
@@ -645,11 +648,15 @@ export function usePortfolioDashboard() {
 
   watch(aiSide, resetAiRecognition)
 
-  onMounted(() => {
+  onMounted(async () => {
     if (!selectedHoldingId.value) {
       selectedHoldingId.value = store.holdings[0]?.id ?? null
     }
-    void syncPortfolioWithNetWorth()
+    try {
+      await syncPortfolioWithNetWorth()
+    } finally {
+      isInitialSyncing.value = false
+    }
   })
 
   return {
