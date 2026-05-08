@@ -2,8 +2,10 @@ import {
   AI_CHAT_STORAGE_KEY,
   DEFAULT_AI_CONFIG,
   DEFAULT_BUDGET,
+  PORTFOLIO_SCHEMA_VERSION,
   STORAGE_KEY,
 } from '@/constants/portfolio'
+import { normalizePortfolioState } from '@/domain/portfolio'
 import type { AiChatMessage, PortfolioState } from '@/types'
 
 const PORTFOLIO_DB_NAME = 'yjgt-db'
@@ -24,12 +26,13 @@ function parseStorageItem<T>(key: string): T | null {
 
 export function createEmptyPortfolioState(): PortfolioState {
   return {
+    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
     budget: { ...DEFAULT_BUDGET },
     aiConfig: { ...DEFAULT_AI_CONFIG },
-    holdings: [],
+    funds: [],
+    positions: [],
     operations: [],
-    history: [],
-    holdingHistory: [],
+    navHistory: [],
     updatedAt: '',
   }
 }
@@ -84,7 +87,7 @@ export async function loadPortfolio(): Promise<PortfolioState> {
       request.onerror = () => reject(request.error ?? new Error('读取组合数据失败'))
     })
 
-    return stored ?? createEmptyPortfolioState()
+    return normalizePortfolioState(stored ?? createEmptyPortfolioState())
   } catch {
     return createEmptyPortfolioState()
   }

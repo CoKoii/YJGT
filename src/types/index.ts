@@ -42,6 +42,33 @@ export type Holding = {
 export type HoldingDraft = Omit<Holding, 'updatedAt'>
 export type HoldingFormModel = HoldingDraft
 
+export type FundRecord = {
+  code: string
+  name: string
+}
+
+export type PositionSeed = {
+  amount: number
+  profit: number
+  nav?: number
+  navDate?: string
+}
+
+export type PositionRecord = {
+  fundCode: string
+  mine: PositionSeed
+  blogger: PositionSeed
+  updatedAt: string
+}
+
+export type FundNavPoint = FundTrendPoint
+
+export type FundNavHistory = {
+  fundCode: string
+  points: FundNavPoint[]
+  updatedAt: string
+}
+
 export type OperationSideValues = {
   mine: number
   blogger: number
@@ -168,12 +195,13 @@ export type UploadedFileItem = {
 export type UploadedFileMeta = Pick<UploadedFileItem, 'uid' | 'name'>
 
 export type PortfolioState = {
+  schemaVersion?: number
   budget: BudgetConfig
   aiConfig: AiConfig
-  holdings: Holding[]
+  funds: FundRecord[]
+  positions: PositionRecord[]
   operations: HoldingOperation[]
-  history: ProfitSnapshot[]
-  holdingHistory: HoldingProfitSnapshot[]
+  navHistory: FundNavHistory[]
   updatedAt: string
 }
 

@@ -31,7 +31,6 @@ import {
 } from '@/utils/calculations'
 import { formatDateKey } from '@/utils/date'
 import { downloadText, readImageDataUrl } from '@/utils/file'
-import { syncPortfolioLedger } from '@/utils/portfolioLedger'
 import { message, Modal } from 'ant-design-vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
@@ -73,7 +72,6 @@ export function usePortfolioDashboard() {
   const isChatStreaming = ref(false)
   const isFundInfoLoading = ref(false)
   const isSyncingNetWorth = ref(false)
-  const isInitialSyncing = ref(true)
   const uploadedFiles = ref<UploadedFileMeta[]>([])
   const uploadedImageDataUrls = ref<Record<string, string>>({})
   const recognizedRows = ref<RecognizedHolding[]>([])
@@ -174,20 +172,18 @@ export function usePortfolioDashboard() {
   )
 
   const todayProfit = computed(() =>
-    isInitialSyncing.value
-      ? { mine: null as number | null, blogger: null as number | null }
-      : holdingRows.value.reduce(
-          (summary, row) => {
-            if (row.myDailyProfit !== null) {
-              summary.mine = (summary.mine ?? 0) + row.myDailyProfit
-            }
-            if (row.bloggerDailyProfit !== null) {
-              summary.blogger = (summary.blogger ?? 0) + row.bloggerDailyProfit
-            }
-            return summary
-          },
-          { mine: null as number | null, blogger: null as number | null },
-        ),
+    holdingRows.value.reduce(
+      (summary, row) => {
+        if (row.myDailyProfit !== null) {
+          summary.mine = (summary.mine ?? 0) + row.myDailyProfit
+        }
+        if (row.bloggerDailyProfit !== null) {
+          summary.blogger = (summary.blogger ?? 0) + row.bloggerDailyProfit
+        }
+        return summary
+      },
+      { mine: null as number | null, blogger: null as number | null },
+    ),
   )
 
   const recognizedSummary = computed(() =>
@@ -218,24 +214,14 @@ export function usePortfolioDashboard() {
       const trendList = await Promise.all(
         fundCodes.map((fundCode) => fetchFundNetWorthTrend(fundCode)),
       )
-      const trends = new Map<string, Awaited<ReturnType<typeof fetchFundNetWorthTrend>>>(
-        fundCodes.map((fundCode, index) => [fundCode, trendList[index] ?? []]),
+      const settledCountBefore = store.operations.filter((item) => item.status === 'settled').length
+      store.setFundNavHistory(
+        fundCodes.map((fundCode, index) => ({ fundCode, points: trendList[index] ?? [] })),
       )
-      const { holdings, operations } = syncPortfolioLedger(store.holdings, store.operations, trends)
-
-      const nextSerialized = JSON.stringify({ holdings, operations })
-      const currentSerialized = JSON.stringify({
-        holdings: store.holdings,
-        operations: store.operations,
-      })
-      if (nextSerialized !== currentSerialized) {
-        const settledCount =
-          operations.filter((item) => item.status === 'settled').length -
-          store.operations.filter((item) => item.status === 'settled').length
-        store.setSyncedPortfolio(holdings, operations)
-        if (showResult && settledCount > 0) {
-          message.success(`已按最新净值结算 ${settledCount} 条操作`)
-        }
+      const settledCount =
+        store.operations.filter((item) => item.status === 'settled').length - settledCountBefore
+      if (showResult && settledCount > 0) {
+        message.success(`已按最新净值结算 ${settledCount} 条操作`)
       }
     } catch (error) {
       if (showResult) {
@@ -652,11 +638,7 @@ export function usePortfolioDashboard() {
     if (!selectedHoldingId.value) {
       selectedHoldingId.value = store.holdings[0]?.id ?? null
     }
-    try {
-      await syncPortfolioWithNetWorth()
-    } finally {
-      isInitialSyncing.value = false
-    }
+    void syncPortfolioWithNetWorth()
   })
 
   return {

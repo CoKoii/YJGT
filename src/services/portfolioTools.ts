@@ -1,4 +1,12 @@
-import type { Holding, HoldingOperation, PortfolioState, PortfolioTotals } from '@/types'
+import type {
+  Holding,
+  HoldingOperation,
+  HoldingProfitSnapshot,
+  PortfolioState,
+  PortfolioTotals,
+  ProfitSnapshot,
+} from '@/types'
+import { projectPortfolio } from '@/domain/portfolio'
 import { loadPortfolio } from '@/services/storage'
 import {
   actualInvested,
@@ -40,8 +48,8 @@ type PortfolioQuerySnapshot = {
   }
   holdings: PortfolioHoldingView[]
   operations: HoldingOperation[]
-  history: PortfolioState['history']
-  holdingHistory: PortfolioState['holdingHistory']
+  history: ProfitSnapshot[]
+  holdingHistory: HoldingProfitSnapshot[]
 }
 
 function findLatestNavDate(items: Holding[], field: 'myNavDate' | 'bloggerNavDate'): string {
@@ -105,11 +113,16 @@ function buildPendingOperationsByFundCode(operations: HoldingOperation[]) {
   return operationsByFundCode
 }
 
-function buildHoldingsView(state: PortfolioState, totals: PortfolioTotals): PortfolioHoldingView[] {
-  const ratio = followRatio(state.budget)
-  const pendingOperationsByFundCode = buildPendingOperationsByFundCode(state.operations)
+function buildHoldingsView(
+  budget: PortfolioState['budget'],
+  holdings: Holding[],
+  operations: HoldingOperation[],
+  totals: PortfolioTotals,
+): PortfolioHoldingView[] {
+  const ratio = followRatio(budget)
+  const pendingOperationsByFundCode = buildPendingOperationsByFundCode(operations)
 
-  return state.holdings.map((holding) => {
+  return holdings.map((holding) => {
     const myInvested = actualInvested(holding.myAmount, holding.myProfit)
     const bloggerInvested = actualInvested(holding.bloggerAmount, holding.bloggerProfit)
     const targetInvested = ratio.blogger > 0 ? bloggerInvested / ratio.blogger : 0
@@ -213,10 +226,13 @@ function pickHolding(snapshot: PortfolioQuerySnapshot, args: { fundCode?: unknow
 
 async function loadPortfolioSnapshot(): Promise<PortfolioQuerySnapshot> {
   const state = await loadPortfolio()
-  const totals = computeTotals(state.holdings)
+  const projection = projectPortfolio(state)
+  const totals = projection.totals
+  const holdings = projection.holdings
+  const operations = projection.operations
   const latestNavDates = {
-    mine: findLatestNavDate(state.holdings, 'myNavDate'),
-    blogger: findLatestNavDate(state.holdings, 'bloggerNavDate'),
+    mine: findLatestNavDate(holdings, 'myNavDate'),
+    blogger: findLatestNavDate(holdings, 'bloggerNavDate'),
   }
 
   return {
@@ -224,10 +240,10 @@ async function loadPortfolioSnapshot(): Promise<PortfolioQuerySnapshot> {
     totals,
     latestNavDates,
     followRatio: followRatio(state.budget),
-    holdings: buildHoldingsView(state, totals),
-    operations: state.operations.map((item) => ({ ...item })),
-    history: state.history,
-    holdingHistory: state.holdingHistory,
+    holdings: buildHoldingsView(state.budget, holdings, operations, totals),
+    operations: operations.map((item) => ({ ...item })),
+    history: projection.history,
+    holdingHistory: projection.holdingHistory,
   }
 }
 

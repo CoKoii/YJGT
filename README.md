@@ -16,12 +16,24 @@
 src/
   components/dashboard/   页面组件与弹窗
   composables/            页面级业务编排
+  domain/                 领域模型投影与组合账本计算
   constants/              常量与默认值
   services/               外部接口与本地持久化
   stores/                 Pinia 状态中心
   utils/                  纯函数工具
   types.ts                统一领域模型
 ```
+
+## 数据模型
+
+本地持久化只保存源数据：
+
+- `funds`：基金代码与名称
+- `positions`：每只基金、每个账户的持仓快照、收益快照、基准净值
+- `operations`：买入、卖出、转换流水
+- `navHistory`：每只基金的每日净值
+
+总收益、当日收益、收益率、持仓占比、趋势图数据都由 `src/domain/portfolio.ts` 实时派生，不再作为主数据落盘。
 
 ## 本地开发
 
