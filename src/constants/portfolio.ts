@@ -38,6 +38,7 @@ export const EMPTY_HOLDING_DRAFT: HoldingDraft = {
   myAmount: 0,
   myProfit: 0,
   myYesterdayProfit: 0,
+  myYesterdayProfitAvailable: false,
   bloggerCost: 0,
   bloggerShares: 0,
   bloggerNav: 0,
@@ -45,6 +46,7 @@ export const EMPTY_HOLDING_DRAFT: HoldingDraft = {
   bloggerAmount: 0,
   bloggerProfit: 0,
   bloggerYesterdayProfit: 0,
+  bloggerYesterdayProfitAvailable: false,
 }
 
 export const DEFAULT_AI_SIDE: InvestorSide = 'mine'

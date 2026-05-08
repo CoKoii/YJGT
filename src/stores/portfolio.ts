@@ -55,7 +55,11 @@ function latestNavForFund(navHistory: PortfolioState['navHistory'], fundCode: st
   return navHistory.find((item) => item.fundCode === fundCode)?.points.at(-1) ?? null
 }
 
-function positionsFromProjection(holdings: ReturnType<typeof projectPortfolio>['holdings']) {
+function positionsFromProjection(
+  holdings: ReturnType<typeof projectPortfolio>['holdings'],
+  currentPositions: PositionRecord[],
+) {
+  const currentByFund = new Map(currentPositions.map((position) => [position.fundCode, position]))
   return holdings.map((holding) => ({
     fundCode: holding.fundCode,
     mine: {
@@ -63,14 +67,14 @@ function positionsFromProjection(holdings: ReturnType<typeof projectPortfolio>['
       profit: holding.myProfit,
       nav: holding.myNav,
       navDate: holding.myNavDate,
-      startedAt: holding.myNavDate,
+      startedAt: currentByFund.get(holding.fundCode)?.mine.startedAt ?? holding.myNavDate,
     },
     blogger: {
       amount: holding.bloggerAmount,
       profit: holding.bloggerProfit,
       nav: holding.bloggerNav,
       navDate: holding.bloggerNavDate,
-      startedAt: holding.bloggerNavDate,
+      startedAt: currentByFund.get(holding.fundCode)?.blogger.startedAt ?? holding.bloggerNavDate,
     },
     updatedAt: nowIso(),
   }))
@@ -183,22 +187,24 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
   function upsertHolding(payload: HoldingDraft) {
     const fundCode = payload.fundCode.trim()
+    const latestNav = latestNavForFund(navHistory.value, fundCode)
+    const startedAt = createHistoryDateKey()
     upsertFund({ code: fundCode, name: payload.fundName.trim() })
     upsertPosition({
       fundCode,
       mine: {
         amount: payload.myAmount,
         profit: payload.myProfit,
-        nav: payload.myNav || latestNavForFund(navHistory.value, fundCode)?.value,
-        navDate: payload.myNavDate || latestNavForFund(navHistory.value, fundCode)?.date,
-        startedAt: payload.myNavDate || createHistoryDateKey(),
+        nav: payload.myNav || latestNav?.value,
+        navDate: payload.myNavDate || latestNav?.date,
+        startedAt: payload.myNavDate || startedAt,
       },
       blogger: {
         amount: payload.bloggerAmount,
         profit: payload.bloggerProfit,
-        nav: payload.bloggerNav || latestNavForFund(navHistory.value, fundCode)?.value,
-        navDate: payload.bloggerNavDate || latestNavForFund(navHistory.value, fundCode)?.date,
-        startedAt: payload.bloggerNavDate || createHistoryDateKey(),
+        nav: payload.bloggerNav || latestNav?.value,
+        navDate: payload.bloggerNavDate || latestNav?.date,
+        startedAt: payload.bloggerNavDate || startedAt,
       },
       updatedAt: nowIso(),
     })
@@ -254,6 +260,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   function applyRecognizedHoldings(side: 'mine' | 'blogger', rows: RecognizedHolding[]) {
     rows.forEach((row) => {
       const fundCode = row.fundCode.trim()
+      const latestNav = latestNavForFund(navHistory.value, fundCode)
       upsertFund({ code: fundCode, name: row.fundName.trim() })
       const existing = positions.value.find((item) => item.fundCode === fundCode) ?? createPosition(fundCode)
       upsertPosition({
@@ -261,9 +268,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
         [side]: {
           amount: row.amount,
           profit: row.profit,
-          nav: latestNavForFund(navHistory.value, fundCode)?.value,
-          navDate: latestNavForFund(navHistory.value, fundCode)?.date,
-          startedAt: latestNavForFund(navHistory.value, fundCode)?.date || createHistoryDateKey(),
+          nav: latestNav?.value,
+          navDate: latestNav?.date,
+          startedAt: latestNav?.date || createHistoryDateKey(),
         },
         updatedAt: nowIso(),
       })
@@ -275,7 +282,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   function commitProjection() {
     const nextProjection = projectPortfolio(sourceState.value)
     operations.value = nextProjection.operations
-    positions.value = positionsFromProjection(nextProjection.holdings)
+    positions.value = positionsFromProjection(nextProjection.holdings, positions.value)
   }
 
   function setFundNavHistory(updates: Array<{ fundCode: string; points: FundNavPoint[] }>) {

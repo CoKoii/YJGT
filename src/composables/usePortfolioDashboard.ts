@@ -29,7 +29,6 @@ import {
   followRatio,
   profitRate,
 } from '@/utils/calculations'
-import { formatDateKey } from '@/utils/date'
 import { downloadText, readImageDataUrl } from '@/utils/file'
 import { message, Modal } from 'ant-design-vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -142,11 +141,15 @@ export function usePortfolioDashboard() {
       const bloggerInvested = actualInvested(holding.bloggerAmount, holding.bloggerProfit)
       const targetInvested = ratio.value.blogger > 0 ? bloggerInvested / ratio.value.blogger : 0
       const myDailyProfit =
-        holding.myNavDate && holding.myNavDate === latestNavDates.value.mine
+        holding.myYesterdayProfitAvailable &&
+        holding.myNavDate &&
+        holding.myNavDate === latestNavDates.value.mine
           ? holding.myYesterdayProfit
           : null
       const bloggerDailyProfit =
-        holding.bloggerNavDate && holding.bloggerNavDate === latestNavDates.value.blogger
+        holding.bloggerYesterdayProfitAvailable &&
+        holding.bloggerNavDate &&
+        holding.bloggerNavDate === latestNavDates.value.blogger
           ? holding.bloggerYesterdayProfit
           : null
 

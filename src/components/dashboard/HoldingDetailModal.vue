@@ -47,13 +47,6 @@ function getChartColor(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-function createRateMap(
-  storedHistory: HoldingProfitSnapshot[],
-  key: 'myProfitRate' | 'bloggerProfitRate',
-) {
-  return new Map(storedHistory.map((item) => [item.date, item[key]]))
-}
-
 const title = computed(() =>
   props.holding ? `${props.holding.fundName}（${props.holding.fundCode}）` : '基金详情',
 )
@@ -91,15 +84,13 @@ function renderChart() {
   const storedHistory = props.holdingHistory
     .filter((item) => item.fundCode === currentHolding.fundCode)
     .sort((left, right) => left.date.localeCompare(right.date))
-  const settledOperations = relatedOperations.value.filter((item) => item.status === 'settled')
-  const myRateByDate = createRateMap(storedHistory, 'myProfitRate')
-  const bloggerRateByDate = createRateMap(storedHistory, 'bloggerProfitRate')
-  const mySnapshotData = storedHistory
-    .filter((item) => myRateByDate.has(item.date))
-    .map((item) => [item.date, myRateByDate.get(item.date)] as [string, number])
-  const bloggerSnapshotData = storedHistory
-    .filter((item) => bloggerRateByDate.has(item.date))
-    .map((item) => [item.date, bloggerRateByDate.get(item.date)] as [string, number])
+  const mySnapshotData = storedHistory.map(
+    (item) => [item.date, item.myProfitRate] as [string, number],
+  )
+  const bloggerSnapshotData = storedHistory.map(
+    (item) => [item.date, item.bloggerProfitRate] as [string, number],
+  )
+  const snapshotByDate = new Map(storedHistory.map((item) => [item.date, item]))
 
   const operationData = relatedOperations.value
     .flatMap((item) => {
@@ -108,12 +99,12 @@ function renderChart() {
 
       const points = [
         {
-          value: myRateByDate.get(point.date),
+          value: snapshotByDate.get(point.date)?.myProfitRate,
           label: getOperationLabel(item.type),
           color: brandColor,
         },
         {
-          value: bloggerRateByDate.get(point.date),
+          value: snapshotByDate.get(point.date)?.bloggerProfitRate,
           label: getOperationLabel(item.type),
           color: BLOGGER_COLOR,
         },

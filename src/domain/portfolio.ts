@@ -1,6 +1,5 @@
 import { PORTFOLIO_SCHEMA_VERSION } from '@/constants/portfolio'
 import type {
-  BudgetConfig,
   FundNavHistory,
   FundNavPoint,
   FundRecord,
@@ -277,12 +276,22 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
   const previous = latest ? previousPoint(navPoints, latest.date) : null
   const nav = latest?.value ?? 0
   const navDate = latest?.date ?? ''
-  const myPreviousNav =
-    previous && (!state.mine.startedAt || state.mine.startedAt <= previous.date) ? previous.value : nav
-  const bloggerPreviousNav =
-    previous && (!state.blogger.startedAt || state.blogger.startedAt <= previous.date)
-      ? previous.value
-      : nav
+  const canUseMyPreviousNav = Boolean(
+    previous &&
+      state.mine.shares > 0 &&
+      (!state.mine.startedAt || state.mine.startedAt <= previous.date),
+  )
+  const canUseBloggerPreviousNav = Boolean(
+    previous &&
+      state.blogger.shares > 0 &&
+      (!state.blogger.startedAt || state.blogger.startedAt <= previous.date),
+  )
+  const myYesterdayProfitAvailable = Boolean(
+    canUseMyPreviousNav,
+  )
+  const bloggerYesterdayProfitAvailable = Boolean(canUseBloggerPreviousNav)
+  const myPreviousNav = canUseMyPreviousNav && previous ? previous.value : nav
+  const bloggerPreviousNav = canUseBloggerPreviousNav && previous ? previous.value : nav
   const myAmount = roundMoney(state.mine.shares * nav)
   const bloggerAmount = roundMoney(state.blogger.shares * nav)
 
@@ -297,6 +306,7 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
     myAmount,
     myProfit: roundMoney(myAmount - state.mine.cost),
     myYesterdayProfit: roundMoney(state.mine.shares * (nav - myPreviousNav)),
+    myYesterdayProfitAvailable,
     bloggerCost: roundMoney(state.blogger.cost),
     bloggerShares: roundShares(state.blogger.shares),
     bloggerNav: nav,
@@ -304,6 +314,7 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
     bloggerAmount,
     bloggerProfit: roundMoney(bloggerAmount - state.blogger.cost),
     bloggerYesterdayProfit: roundMoney(state.blogger.shares * (nav - bloggerPreviousNav)),
+    bloggerYesterdayProfitAvailable,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -323,8 +334,10 @@ export function computeTotals(holdings: Holding[]): PortfolioTotals {
     totals.bloggerProfit += holding.bloggerProfit
     totals.myInvested += actualInvested(holding.myAmount, holding.myProfit)
     totals.bloggerInvested += actualInvested(holding.bloggerAmount, holding.bloggerProfit)
-    if (holding.myNavDate === latestMyDate) totals.myYesterdayProfit += holding.myYesterdayProfit
-    if (holding.bloggerNavDate === latestBloggerDate) {
+    if (holding.myNavDate === latestMyDate && holding.myYesterdayProfitAvailable) {
+      totals.myYesterdayProfit += holding.myYesterdayProfit
+    }
+    if (holding.bloggerNavDate === latestBloggerDate && holding.bloggerYesterdayProfitAvailable) {
       totals.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
     }
   })

@@ -3,7 +3,6 @@ import type {
   HoldingOperation,
   HoldingProfitSnapshot,
   PortfolioState,
-  PortfolioTotals,
   ProfitSnapshot,
 } from '@/types'
 import { projectPortfolio } from '@/domain/portfolio'
@@ -37,7 +36,7 @@ type PortfolioHoldingView = {
 
 type PortfolioQuerySnapshot = {
   budget: PortfolioState['budget']
-  totals: PortfolioTotals
+  totals: ReturnType<typeof projectPortfolio>['totals']
   latestNavDates: {
     mine: string
     blogger: string
@@ -60,43 +59,6 @@ function findLatestNavDate(items: Holding[], field: 'myNavDate' | 'bloggerNavDat
   }, '')
 }
 
-function computeTotals(holdings: Holding[]): PortfolioTotals {
-  const latestMyNavDate = findLatestNavDate(holdings, 'myNavDate')
-  const latestBloggerNavDate = findLatestNavDate(holdings, 'bloggerNavDate')
-  const aggregate = {
-    myAmount: 0,
-    bloggerAmount: 0,
-    myProfit: 0,
-    bloggerProfit: 0,
-    myInvested: 0,
-    bloggerInvested: 0,
-    myYesterdayProfit: 0,
-    bloggerYesterdayProfit: 0,
-  }
-
-  holdings.forEach((holding) => {
-    aggregate.myAmount += holding.myAmount
-    aggregate.bloggerAmount += holding.bloggerAmount
-    aggregate.myProfit += holding.myProfit
-    aggregate.bloggerProfit += holding.bloggerProfit
-    aggregate.myInvested += actualInvested(holding.myAmount, holding.myProfit)
-    aggregate.bloggerInvested += actualInvested(holding.bloggerAmount, holding.bloggerProfit)
-
-    if (holding.myNavDate === latestMyNavDate) {
-      aggregate.myYesterdayProfit += holding.myYesterdayProfit
-    }
-    if (holding.bloggerNavDate === latestBloggerNavDate) {
-      aggregate.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
-    }
-  })
-
-  return {
-    ...aggregate,
-    myProfitRate: profitRate(aggregate.myAmount, aggregate.myProfit),
-    bloggerProfitRate: profitRate(aggregate.bloggerAmount, aggregate.bloggerProfit),
-  }
-}
-
 function buildPendingOperationsByFundCode(operations: HoldingOperation[]) {
   const operationsByFundCode = new Map<string, HoldingOperation[]>()
 
@@ -117,7 +79,7 @@ function buildHoldingsView(
   budget: PortfolioState['budget'],
   holdings: Holding[],
   operations: HoldingOperation[],
-  totals: PortfolioTotals,
+  totals: ReturnType<typeof projectPortfolio>['totals'],
 ): PortfolioHoldingView[] {
   const ratio = followRatio(budget)
   const pendingOperationsByFundCode = buildPendingOperationsByFundCode(operations)
@@ -257,11 +219,25 @@ export async function getPortfolioSummaryTool() {
     latestNavDates: snapshot.latestNavDates,
     latestDailyProfit: {
       mine: {
-        amount: snapshot.totals.myYesterdayProfit,
+        amount:
+          snapshot.holdings.some(
+            (item) =>
+              item.raw.myNavDate === snapshot.latestNavDates.mine &&
+              item.raw.myYesterdayProfitAvailable,
+          )
+            ? snapshot.totals.myYesterdayProfit
+            : null,
         navDate: snapshot.latestNavDates.mine || null,
       },
       blogger: {
-        amount: snapshot.totals.bloggerYesterdayProfit,
+        amount:
+          snapshot.holdings.some(
+            (item) =>
+              item.raw.bloggerNavDate === snapshot.latestNavDates.blogger &&
+              item.raw.bloggerYesterdayProfitAvailable,
+          )
+            ? snapshot.totals.bloggerYesterdayProfit
+            : null,
         navDate: snapshot.latestNavDates.blogger || null,
       },
     },

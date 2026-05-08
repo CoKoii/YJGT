@@ -29,6 +29,7 @@ export type Holding = {
   myAmount: number
   myProfit: number
   myYesterdayProfit: number
+  myYesterdayProfitAvailable: boolean
   bloggerCost: number
   bloggerShares: number
   bloggerNav: number
@@ -36,6 +37,7 @@ export type Holding = {
   bloggerAmount: number
   bloggerProfit: number
   bloggerYesterdayProfit: number
+  bloggerYesterdayProfitAvailable: boolean
   updatedAt: string
 }
 
