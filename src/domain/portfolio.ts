@@ -19,6 +19,8 @@ type SideState = {
   shares: number
   cost: number
   startedAt: string
+  snapshotAmount: number
+  snapshotProfit: number
 }
 
 type LedgerFundState = {
@@ -54,6 +56,16 @@ function roundMoney(value: number): number {
 
 function roundShares(value: number): number {
   return Number((Number.isFinite(value) ? value : 0).toFixed(4))
+}
+
+function createEmptySideState(): SideState {
+  return {
+    shares: 0,
+    cost: 0,
+    startedAt: '',
+    snapshotAmount: 0,
+    snapshotProfit: 0,
+  }
 }
 
 function emptyTotals(): PortfolioTotals {
@@ -112,11 +124,24 @@ function stateFromRecordedPosition(
   latestNav: number,
 ): SideState {
   const nav = seed.nav && seed.nav > 0 ? seed.nav : latestNav
-  if (seed.amount <= 0 || nav <= 0) return { shares: 0, cost: 0, startedAt: '' }
+  if (seed.amount <= 0) {
+    return { shares: 0, cost: 0, startedAt: '', snapshotAmount: 0, snapshotProfit: 0 }
+  }
+  if (nav <= 0) {
+    return {
+      shares: 0,
+      cost: Math.max(seed.amount - seed.profit, 0),
+      startedAt: toDateKey(seed.startedAt) || toDateKey(seed.navDate),
+      snapshotAmount: roundMoney(seed.amount),
+      snapshotProfit: roundMoney(seed.profit),
+    }
+  }
   return {
     shares: seed.amount / nav,
     cost: Math.max(seed.amount - seed.profit, 0),
     startedAt: toDateKey(seed.startedAt) || toDateKey(seed.navDate),
+    snapshotAmount: 0,
+    snapshotProfit: 0,
   }
 }
 
@@ -126,6 +151,8 @@ function applyBuy(state: SideState, amount: number, nav: number): SideState {
     shares: state.shares + amount / nav,
     cost: state.cost + amount,
     startedAt: state.startedAt,
+    snapshotAmount: state.snapshotAmount,
+    snapshotProfit: state.snapshotProfit,
   }
 }
 
@@ -137,6 +164,8 @@ function applySell(state: SideState, shares: number): SideState {
     shares: Math.max(0, state.shares - reducedShares),
     cost: Math.max(0, state.cost - costToReduce),
     startedAt: state.startedAt,
+    snapshotAmount: state.snapshotAmount,
+    snapshotProfit: state.snapshotProfit,
   }
 }
 
@@ -149,8 +178,8 @@ function ensureLedgerFund(states: Map<string, LedgerFundState>, code: string, na
 
   const state: LedgerFundState = {
     fund: { code, name },
-    mine: { shares: 0, cost: 0, startedAt: '' },
-    blogger: { shares: 0, cost: 0, startedAt: '' },
+    mine: createEmptySideState(),
+    blogger: createEmptySideState(),
   }
   states.set(code, state)
   return state
@@ -292,8 +321,18 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
   const bloggerYesterdayProfitAvailable = Boolean(canUseBloggerPreviousNav)
   const myPreviousNav = canUseMyPreviousNav && previous ? previous.value : nav
   const bloggerPreviousNav = canUseBloggerPreviousNav && previous ? previous.value : nav
-  const myAmount = roundMoney(state.mine.shares * nav)
-  const bloggerAmount = roundMoney(state.blogger.shares * nav)
+  const myAmount =
+    state.mine.shares > 0 ? roundMoney(state.mine.shares * nav) : roundMoney(state.mine.snapshotAmount)
+  const bloggerAmount =
+    state.blogger.shares > 0
+      ? roundMoney(state.blogger.shares * nav)
+      : roundMoney(state.blogger.snapshotAmount)
+  const myProfit =
+    state.mine.shares > 0 ? roundMoney(myAmount - state.mine.cost) : roundMoney(state.mine.snapshotProfit)
+  const bloggerProfit =
+    state.blogger.shares > 0
+      ? roundMoney(bloggerAmount - state.blogger.cost)
+      : roundMoney(state.blogger.snapshotProfit)
 
   return {
     id: state.fund.code,
@@ -304,7 +343,7 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
     myNav: nav,
     myNavDate: navDate,
     myAmount,
-    myProfit: roundMoney(myAmount - state.mine.cost),
+    myProfit,
     myYesterdayProfit: roundMoney(state.mine.shares * (nav - myPreviousNav)),
     myYesterdayProfitAvailable,
     bloggerCost: roundMoney(state.blogger.cost),
@@ -312,7 +351,7 @@ function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
     bloggerNav: nav,
     bloggerNavDate: navDate,
     bloggerAmount,
-    bloggerProfit: roundMoney(bloggerAmount - state.blogger.cost),
+    bloggerProfit,
     bloggerYesterdayProfit: roundMoney(state.blogger.shares * (nav - bloggerPreviousNav)),
     bloggerYesterdayProfitAvailable,
     updatedAt: new Date().toISOString(),
