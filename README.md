@@ -1,63 +1,43 @@
-# YJGT
+# YJGT-new
 
-一个基于 Vue 3 + Pinia + Ant Design Vue 的基金跟投管理工具，支持：
+`YJGT-new` 是对旧版跟投助手的重新设计。新系统保留跟投管理的工作台外观，但把业务核心改成源事件账本，避免把当前持仓、收益率、历史曲线这类派生数据重复落盘。
 
-- 持仓录入、编辑、删除
-- 博主 / 我的预算与跟投比例计算
-- 买入、卖出、转换操作记录
-- 基金详情走势查看
-- AI 持仓截图识别
-- AI 组合问答
-- JSON / CSV 导出
+## 设计原则
 
-## 项目结构
+- 只持久化必要源数据：`settings`、`funds`、`events`、`navHistory`。
+- 当前持仓、投入金额、收益、收益率、仓位占比、历史曲线全部由 `src/domain/portfolio.ts` 即时投影。
+- 截图快照只保存真实持仓金额和收益；份额可由净值缓存派生展示，但不作为源数据重复落盘。
+- 买入、卖出、转换先记录为待结算操作；当交易日净值同步到本地后，投影层自动结算并流转金额与份额。
+- 当前持仓卖空后自然从列表消失，历史事件仍保留。转换会减少转出基金份额，并新增或增加转入基金持仓。
+- AI 截图识别写入 `holding_snapshot` 源事件；AI 问答只读取当前投影摘要，不会改写账本。
+
+## 源数据模型
+
+`PortfolioEvent` 分两类：
+
+- `holding_snapshot`：真实持仓快照，来自手工录入或截图识别结果。可只包含金额和收益；份额由最新净值派生展示。
+- `trade`：买入、卖出、转换操作，包含 `pending` 与 `settled` 两种状态。待结算操作保存用户真实录入的金额或份额，成交净值、成交份额、成交金额由交易日净值结算得到。
+
+净值历史 `navHistory` 只缓存外部基金净值点。交易和快照自带的确认净值会作为真实源数据参与投影，但不会生成额外派生快照。
+
+## 目录
 
 ```text
 src/
-  components/dashboard/   页面组件与弹窗
-  composables/            页面级业务编排
-  domain/                 领域模型投影与组合账本计算
-  constants/              常量与默认值
-  services/               外部接口与本地持久化
-  stores/                 Pinia 状态中心
-  utils/                  纯函数工具
-  types.ts                统一领域模型
+  components/       工作台 UI 组件
+  constants/        常量与默认配置
+  domain/           账本投影与交易流转
+  services/         本地持久化与基金接口
+  stores/           Pinia 状态入口
+  types/            领域类型
+  utils/            日期、数字、文件工具
 ```
 
-## 数据模型
-
-本地持久化只保存源数据：
-
-- `funds`：基金代码与名称
-- `positions`：每只基金、每个账户的持仓快照、收益快照、基准净值
-- `operations`：买入、卖出、转换流水
-- `navHistory`：每只基金的每日净值
-
-总收益、当日收益、收益率、持仓占比、趋势图数据都由 `src/domain/portfolio.ts` 实时派生，不再作为主数据落盘。
-
-## 本地开发
+## 开发
 
 ```sh
-pnpm install
-pnpm dev
+pnpm --dir YJGT-new install
+pnpm --dir YJGT-new dev
+pnpm --dir YJGT-new type-check
+pnpm --dir YJGT-new build
 ```
-
-## 校验与构建
-
-```sh
-pnpm type-check
-pnpm build
-pnpm lint
-```
-
-## 自动部署
-
-项目已配置 GitHub Actions 自动部署到 GitHub Pages：
-
-- 推送到 `main` 分支后会自动执行类型检查、构建并发布
-- 也支持在 GitHub Actions 页面手动触发部署
-
-首次使用时，需要在 GitHub 仓库设置中确认：
-
-- `Settings -> Pages -> Build and deployment`
-- `Source` 选择 `GitHub Actions`

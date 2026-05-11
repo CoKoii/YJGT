@@ -1,25 +1,18 @@
-import { createApp } from 'vue'
-import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
-import VxeUI from 'vxe-pc-ui'
-import 'vxe-pc-ui/lib/style.css'
-import VXETable from 'vxe-table'
 import 'vxe-table/lib/style.css'
-import { createPinia } from 'pinia'
-import App from './App.vue'
-import { usePortfolioStore } from './stores/portfolio'
 import './styles.css'
 
-const app = createApp(App)
-const pinia = createPinia()
+import Antd from 'ant-design-vue'
+import { createPinia } from 'pinia'
+import { createApp } from 'vue'
+import VxeUI from 'vxe-pc-ui'
+import VxeUITable from 'vxe-table'
+import App from './App.vue'
 
-app.use(pinia)
+const app = createApp(App)
+
+app.use(createPinia())
 app.use(Antd)
 app.use(VxeUI)
-app.use(VXETable)
-
-const store = usePortfolioStore(pinia)
-
-void store.hydrate().finally(() => {
-  app.mount('#app')
-})
+app.use(VxeUITable)
+app.mount('#app')

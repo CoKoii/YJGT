@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ClearOutlined, SendOutlined } from '@ant-design/icons-vue'
 import { nextTick, ref, watch } from 'vue'
-import type { AiChatMessage } from '@/types'
+import type { AiChatMessage } from '@/types/portfolio'
 import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{
@@ -16,38 +16,17 @@ const emit = defineEmits<{
 
 const bodyRef = ref<HTMLDivElement | null>(null)
 const draftInput = ref('')
-const ignoredEchoValue = ref<string | null>(null)
 
-function handleInputChange(value: string) {
-  if (ignoredEchoValue.value !== null && value === ignoredEchoValue.value) {
-    ignoredEchoValue.value = null
-    return
-  }
-
-  ignoredEchoValue.value = null
-  draftInput.value = value
-}
-
-function submitInput(value = draftInput.value) {
-  const normalizedValue = value.trim()
-  if (!normalizedValue || props.isStreaming) return
-
-  ignoredEchoValue.value = value
+function submitInput(): void {
+  const question = draftInput.value.trim()
+  if (!question || props.isStreaming) return
   draftInput.value = ''
-  emit('send', normalizedValue)
+  emit('send', question)
 }
 
-function handlePressEnter(event: KeyboardEvent) {
-  event.preventDefault()
-  const inputValue = (event.target as HTMLInputElement | null)?.value ?? draftInput.value
-  submitInput(inputValue)
-}
-
-function scrollToBottom() {
+function scrollToBottom(): void {
   void nextTick(() => {
-    if (bodyRef.value) {
-      bodyRef.value.scrollTop = bodyRef.value.scrollHeight
-    }
+    if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
   })
 }
 
@@ -72,7 +51,7 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
     </template>
     <div ref="bodyRef" class="ai-chat-body">
       <div v-if="messages.length === 0" class="ai-chat-empty">
-        可以直接问持仓情况、收益对比、跟投偏差，也可以查询基金信息。
+        可以直接问持仓、收益、仓位偏差和跟投建议。
       </div>
       <div
         v-for="message in messages"
@@ -88,12 +67,11 @@ watch([() => props.messages, () => props.isStreaming], scrollToBottom, {
     </div>
     <div class="ai-chat-input">
       <a-input
-        :value="draftInput"
+        v-model:value="draftInput"
         class="ai-chat-textarea"
         :disabled="isStreaming"
-        placeholder="比如：我现在和博主的仓位差多少？"
-        @update:value="handleInputChange"
-        @press-enter="handlePressEnter"
+        placeholder="比如：我和博主的仓位差多少？"
+        @press-enter="submitInput"
       />
       <a-button
         type="primary"

@@ -1,503 +1,848 @@
-import { PORTFOLIO_SCHEMA_VERSION } from '@/constants/portfolio'
+import { INVESTOR_SIDES, PORTFOLIO_SCHEMA_VERSION } from '@/constants/portfolio'
 import type {
+  ConvertTrade,
+  Fund,
   FundNavHistory,
   FundNavPoint,
-  FundRecord,
-  Holding,
-  HoldingOperation,
-  HoldingProfitSnapshot,
-  InvestorSide,
+  HoldingRow,
+  HoldingSnapshot,
+  PortfolioEvent,
+  PortfolioHistoryPoint,
+  PortfolioProjection,
   PortfolioState,
   PortfolioTotals,
-  PositionRecord,
-  ProfitSnapshot,
-} from '@/types'
-import { actualInvested, profitRate } from '@/utils/calculations'
-import { formatDateKey } from '@/utils/date'
+  SidePosition,
+  SideValues,
+  Trade,
+} from '@/types/portfolio'
+import { normalizeDateKey } from '@/utils/date'
+import { followRatio, profitRate, roundMoney, roundShares } from '@/utils/number'
 
-type SideState = {
-  shares: number
-  cost: number
-  startedAt: string
-  snapshotAmount: number
-  snapshotProfit: number
+type FundBook = {
+  fund: Fund
+  mine: SidePosition
+  blogger: SidePosition
+  pendingEvents: Trade[]
+  eventCount: number
 }
 
-type LedgerFundState = {
-  fund: FundRecord
-  mine: SideState
-  blogger: SideState
+type ProjectionOptions = {
+  throughDate?: string
 }
 
-type LegacyPortfolioState = Omit<PortfolioState, 'funds' | 'positions' | 'navHistory'> & {
-  funds?: FundRecord[]
-  positions?: PositionRecord[]
-  navHistory?: FundNavHistory[]
-  snapshots?: ProfitSnapshot[]
-  holdingSnapshots?: HoldingProfitSnapshot[]
-  holdings?: Holding[]
-  history?: ProfitSnapshot[]
-  holdingHistory?: HoldingProfitSnapshot[]
+function nowIso(): string {
+  return new Date().toISOString()
 }
 
-export type PortfolioProjection = {
-  holdings: Holding[]
-  operations: HoldingOperation[]
-  history: ProfitSnapshot[]
-  holdingHistory: HoldingProfitSnapshot[]
-  totals: PortfolioTotals
-}
-
-const SIDES: InvestorSide[] = ['mine', 'blogger']
-
-function roundMoney(value: number): number {
-  return Number((Number.isFinite(value) ? value : 0).toFixed(2))
-}
-
-function roundShares(value: number): number {
-  return Number((Number.isFinite(value) ? value : 0).toFixed(4))
-}
-
-function createEmptySideState(): SideState {
+function createSidePosition(): SidePosition {
   return {
     shares: 0,
     cost: 0,
-    startedAt: '',
-    snapshotAmount: 0,
-    snapshotProfit: 0,
+    unknownAmount: 0,
+    unknownCost: 0,
+    unknownProfit: 0,
+    realizedProfit: 0,
+    lastSnapshotAmount: 0,
+    lastSnapshotProfit: 0,
+    lastSnapshotDate: '',
   }
+}
+
+function cloneSidePosition(position: SidePosition): SidePosition {
+  return { ...position }
+}
+
+function isActivePosition(position: SidePosition): boolean {
+  return position.shares > 0.0001 || position.cost > 0.01 || position.unknownAmount > 0.01
 }
 
 function emptyTotals(): PortfolioTotals {
   return {
     myAmount: 0,
     bloggerAmount: 0,
+    myCost: 0,
+    bloggerCost: 0,
     myProfit: 0,
     bloggerProfit: 0,
-    myInvested: 0,
-    bloggerInvested: 0,
-    myYesterdayProfit: 0,
-    bloggerYesterdayProfit: 0,
     myProfitRate: 0,
     bloggerProfitRate: 0,
+    myTodayProfit: null,
+    bloggerTodayProfit: null,
   }
 }
 
-function uniqueByCode(funds: FundRecord[]): FundRecord[] {
-  const byCode = new Map<string, FundRecord>()
+function normalizeFund(fund: Fund): Fund | null {
+  const code = fund.code.trim()
+  if (!code) return null
+  return {
+    code,
+    name: fund.name.trim(),
+    archivedAt: fund.archivedAt,
+  }
+}
+
+function uniqueFunds(funds: Fund[]): Fund[] {
+  const byCode = new Map<string, Fund>()
   funds.forEach((fund) => {
-    if (!fund.code) return
-    byCode.set(fund.code, { code: fund.code, name: fund.name })
+    const normalized = normalizeFund(fund)
+    if (!normalized) return
+    const existing = byCode.get(normalized.code)
+    byCode.set(normalized.code, {
+      ...existing,
+      ...normalized,
+      name: normalized.name || existing?.name || '',
+    })
   })
-  return [...byCode.values()]
+  return [...byCode.values()].sort((left, right) => left.code.localeCompare(right.code))
 }
 
 function compactNavPoints(points: FundNavPoint[]): FundNavPoint[] {
   const byDate = new Map<string, FundNavPoint>()
-  points
-    .filter((point) => point.date && Number.isFinite(point.value) && point.value > 0)
-    .forEach((point) => byDate.set(point.date, { date: point.date, value: point.value }))
+  points.forEach((point) => {
+    const date = normalizeDateKey(point.date)
+    if (!date || !Number.isFinite(point.nav) || point.nav <= 0) return
+    byDate.set(date, { date, nav: point.nav })
+  })
   return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date))
-}
-
-function latestPoint(points: FundNavPoint[]): FundNavPoint | null {
-  return points.at(-1) ?? null
-}
-
-function previousPoint(points: FundNavPoint[], date: string): FundNavPoint | null {
-  return [...points].reverse().find((point) => point.date < date) ?? null
-}
-
-function findPoint(points: FundNavPoint[], date: string): FundNavPoint | null {
-  return points.find((point) => point.date === date) ?? null
-}
-
-function toDateKey(value: string | undefined): string {
-  if (!value) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : formatDateKey(date)
-}
-
-function stateFromRecordedPosition(
-  seed: { amount: number; profit: number; nav?: number; navDate?: string; startedAt?: string },
-  latestNav: number,
-): SideState {
-  const nav = seed.nav && seed.nav > 0 ? seed.nav : latestNav
-  if (seed.amount <= 0) {
-    return { shares: 0, cost: 0, startedAt: '', snapshotAmount: 0, snapshotProfit: 0 }
-  }
-  if (nav <= 0) {
-    return {
-      shares: 0,
-      cost: Math.max(seed.amount - seed.profit, 0),
-      startedAt: toDateKey(seed.startedAt) || toDateKey(seed.navDate),
-      snapshotAmount: roundMoney(seed.amount),
-      snapshotProfit: roundMoney(seed.profit),
-    }
-  }
-  return {
-    shares: seed.amount / nav,
-    cost: Math.max(seed.amount - seed.profit, 0),
-    startedAt: toDateKey(seed.startedAt) || toDateKey(seed.navDate),
-    snapshotAmount: 0,
-    snapshotProfit: 0,
-  }
-}
-
-function applyBuy(state: SideState, amount: number, nav: number): SideState {
-  if (amount <= 0 || nav <= 0) return state
-  return {
-    shares: state.shares + amount / nav,
-    cost: state.cost + amount,
-    startedAt: state.startedAt,
-    snapshotAmount: state.snapshotAmount,
-    snapshotProfit: state.snapshotProfit,
-  }
-}
-
-function applySell(state: SideState, shares: number): SideState {
-  if (shares <= 0 || state.shares <= 0) return state
-  const reducedShares = Math.min(state.shares, shares)
-  const costToReduce = (state.cost * reducedShares) / state.shares
-  return {
-    shares: Math.max(0, state.shares - reducedShares),
-    cost: Math.max(0, state.cost - costToReduce),
-    startedAt: state.startedAt,
-    snapshotAmount: state.snapshotAmount,
-    snapshotProfit: state.snapshotProfit,
-  }
-}
-
-function ensureLedgerFund(states: Map<string, LedgerFundState>, code: string, name: string) {
-  const existing = states.get(code)
-  if (existing) {
-    if (name && !existing.fund.name) existing.fund.name = name
-    return existing
-  }
-
-  const state: LedgerFundState = {
-    fund: { code, name },
-    mine: createEmptySideState(),
-    blogger: createEmptySideState(),
-  }
-  states.set(code, state)
-  return state
-}
-
-function buildNavMap(navHistory: FundNavHistory[]): Map<string, FundNavPoint[]> {
-  return new Map(navHistory.map((item) => [item.fundCode, compactNavPoints(item.points)]))
-}
-
-function compactSnapshots(items: ProfitSnapshot[]): ProfitSnapshot[] {
-  const byDate = new Map<string, ProfitSnapshot>()
-  items
-    .filter((item) => toDateKey(item.date))
-    .forEach((item) => byDate.set(item.date, { ...item, date: toDateKey(item.date) }))
-  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).slice(-365)
-}
-
-function compactHoldingSnapshots(items: HoldingProfitSnapshot[]): HoldingProfitSnapshot[] {
-  const byFundDate = new Map<string, HoldingProfitSnapshot>()
-  items
-    .filter((item) => item.fundCode && toDateKey(item.date))
-    .forEach((item) => {
-      const date = toDateKey(item.date)
-      byFundDate.set(`${item.fundCode}:${date}`, { ...item, date })
-    })
-  return [...byFundDate.values()].sort((left, right) => {
-    if (left.date === right.date) return left.fundCode.localeCompare(right.fundCode)
-    return left.date.localeCompare(right.date)
-  })
-}
-
-function seedLedgerState(state: PortfolioState, navByFund: Map<string, FundNavPoint[]>) {
-  const fundsByCode = new Map(state.funds.map((fund) => [fund.code, fund]))
-  const ledger = new Map<string, LedgerFundState>()
-
-  state.positions.forEach((position) => {
-    const fund = fundsByCode.get(position.fundCode) ?? { code: position.fundCode, name: '' }
-    const nav = latestPoint(navByFund.get(position.fundCode) ?? [])?.value ?? 0
-    ledger.set(position.fundCode, {
-      fund,
-      mine: stateFromRecordedPosition(position.mine, nav),
-      blogger: stateFromRecordedPosition(position.blogger, nav),
-    })
-  })
-
-  state.funds.forEach((fund) => ensureLedgerFund(ledger, fund.code, fund.name))
-  return ledger
-}
-
-function canSettle(operation: HoldingOperation, navByFund: Map<string, FundNavPoint[]>): boolean {
-  if (!findPoint(navByFund.get(operation.fundCode) ?? [], operation.tradeDate)) return false
-  if (operation.type !== 'convert') return true
-  return Boolean(findPoint(navByFund.get(operation.targetFund.code) ?? [], operation.tradeDate))
-}
-
-function buildLedgerProjection(state: PortfolioState) {
-  const navByFund = buildNavMap(state.navHistory)
-  const ledger = seedLedgerState(state, navByFund)
-  const sortedOperations = [...state.operations].sort((left, right) => {
-    if (left.tradeDate === right.tradeDate) return left.submittedAt.localeCompare(right.submittedAt)
-    return left.tradeDate.localeCompare(right.tradeDate)
-  })
-
-  const operations = sortedOperations.map((operation) => {
-    if (operation.status === 'settled' || !canSettle(operation, navByFund)) return operation
-
-    const sourceNav = findPoint(navByFund.get(operation.fundCode) ?? [], operation.tradeDate)?.value ?? 0
-    const source = ensureLedgerFund(ledger, operation.fundCode, operation.fundName)
-
-    if (operation.type === 'buy') {
-      SIDES.forEach((side) => {
-        const nextState = applyBuy(source[side], operation.amounts[side], sourceNav)
-        source[side] = {
-          ...nextState,
-          startedAt: nextState.startedAt || operation.tradeDate,
-        }
-      })
-      return {
-        ...operation,
-        status: 'settled' as const,
-        settledAt: new Date().toISOString(),
-        settledFundNav: sourceNav,
-      }
-    }
-
-    SIDES.forEach((side) => {
-      source[side] = applySell(source[side], operation.shares[side])
-    })
-
-    if (operation.type === 'convert') {
-      const targetNav =
-        findPoint(navByFund.get(operation.targetFund.code) ?? [], operation.tradeDate)?.value ?? 0
-      const target = ensureLedgerFund(ledger, operation.targetFund.code, operation.targetFund.name)
-      SIDES.forEach((side) => {
-        const nextState = applyBuy(target[side], operation.shares[side] * sourceNav, targetNav)
-        target[side] = {
-          ...nextState,
-          startedAt: nextState.startedAt || operation.tradeDate,
-        }
-      })
-      return {
-        ...operation,
-        status: 'settled' as const,
-        settledAt: new Date().toISOString(),
-        settledFundNav: sourceNav,
-        settledTargetNav: targetNav,
-      }
-    }
-
-    return {
-      ...operation,
-      status: 'settled' as const,
-      settledAt: new Date().toISOString(),
-      settledFundNav: sourceNav,
-    }
-  })
-
-  return { ledger, navByFund, operations }
-}
-
-function toHolding(state: LedgerFundState, navPoints: FundNavPoint[]): Holding {
-  const latest = latestPoint(navPoints)
-  const previous = latest ? previousPoint(navPoints, latest.date) : null
-  const nav = latest?.value ?? 0
-  const navDate = latest?.date ?? ''
-  const canUseMyPreviousNav = Boolean(
-    previous &&
-      state.mine.shares > 0 &&
-      (!state.mine.startedAt || state.mine.startedAt <= previous.date),
-  )
-  const canUseBloggerPreviousNav = Boolean(
-    previous &&
-      state.blogger.shares > 0 &&
-      (!state.blogger.startedAt || state.blogger.startedAt <= previous.date),
-  )
-  const myYesterdayProfitAvailable = Boolean(
-    canUseMyPreviousNav,
-  )
-  const bloggerYesterdayProfitAvailable = Boolean(canUseBloggerPreviousNav)
-  const myPreviousNav = canUseMyPreviousNav && previous ? previous.value : nav
-  const bloggerPreviousNav = canUseBloggerPreviousNav && previous ? previous.value : nav
-  const myAmount =
-    state.mine.shares > 0 ? roundMoney(state.mine.shares * nav) : roundMoney(state.mine.snapshotAmount)
-  const bloggerAmount =
-    state.blogger.shares > 0
-      ? roundMoney(state.blogger.shares * nav)
-      : roundMoney(state.blogger.snapshotAmount)
-  const myProfit =
-    state.mine.shares > 0 ? roundMoney(myAmount - state.mine.cost) : roundMoney(state.mine.snapshotProfit)
-  const bloggerProfit =
-    state.blogger.shares > 0
-      ? roundMoney(bloggerAmount - state.blogger.cost)
-      : roundMoney(state.blogger.snapshotProfit)
-
-  return {
-    id: state.fund.code,
-    fundName: state.fund.name,
-    fundCode: state.fund.code,
-    myCost: roundMoney(state.mine.cost),
-    myShares: roundShares(state.mine.shares),
-    myNav: nav,
-    myNavDate: navDate,
-    myAmount,
-    myProfit,
-    myYesterdayProfit: roundMoney(state.mine.shares * (nav - myPreviousNav)),
-    myYesterdayProfitAvailable,
-    bloggerCost: roundMoney(state.blogger.cost),
-    bloggerShares: roundShares(state.blogger.shares),
-    bloggerNav: nav,
-    bloggerNavDate: navDate,
-    bloggerAmount,
-    bloggerProfit,
-    bloggerYesterdayProfit: roundMoney(state.blogger.shares * (nav - bloggerPreviousNav)),
-    bloggerYesterdayProfitAvailable,
-    updatedAt: new Date().toISOString(),
-  }
-}
-
-export function computeTotals(holdings: Holding[]): PortfolioTotals {
-  const totals = emptyTotals()
-  const latestMyDate = holdings.reduce((latest, item) => (item.myNavDate > latest ? item.myNavDate : latest), '')
-  const latestBloggerDate = holdings.reduce(
-    (latest, item) => (item.bloggerNavDate > latest ? item.bloggerNavDate : latest),
-    '',
-  )
-
-  holdings.forEach((holding) => {
-    totals.myAmount += holding.myAmount
-    totals.bloggerAmount += holding.bloggerAmount
-    totals.myProfit += holding.myProfit
-    totals.bloggerProfit += holding.bloggerProfit
-    totals.myInvested += actualInvested(holding.myAmount, holding.myProfit)
-    totals.bloggerInvested += actualInvested(holding.bloggerAmount, holding.bloggerProfit)
-    if (holding.myNavDate === latestMyDate && holding.myYesterdayProfitAvailable) {
-      totals.myYesterdayProfit += holding.myYesterdayProfit
-    }
-    if (holding.bloggerNavDate === latestBloggerDate && holding.bloggerYesterdayProfitAvailable) {
-      totals.bloggerYesterdayProfit += holding.bloggerYesterdayProfit
-    }
-  })
-
-  totals.myProfitRate = profitRate(totals.myAmount, totals.myProfit)
-  totals.bloggerProfitRate = profitRate(totals.bloggerAmount, totals.bloggerProfit)
-  return totals
-}
-
-export function projectPortfolio(state: PortfolioState): PortfolioProjection {
-  const { ledger, navByFund, operations } = buildLedgerProjection(state)
-  const holdings = [...ledger.values()]
-    .map((item) => toHolding(item, navByFund.get(item.fund.code) ?? []))
-    .filter(
-      (item) =>
-        item.myAmount > 0 || item.bloggerAmount > 0 || item.myShares > 0 || item.bloggerShares > 0,
-    )
-  const history = compactSnapshots(state.snapshots)
-  const holdingHistory = compactHoldingSnapshots(state.holdingSnapshots)
-
-  return {
-    holdings,
-    operations,
-    history,
-    holdingHistory,
-    totals: computeTotals(holdings),
-  }
-}
-
-export function normalizePortfolioState(input: LegacyPortfolioState | null | undefined): PortfolioState {
-  const now = new Date().toISOString()
-  const funds = uniqueByCode([
-    ...(input?.funds ?? []),
-    ...(input?.holdings ?? []).map((holding) => ({
-      code: holding.fundCode,
-      name: holding.fundName,
-    })),
-  ])
-  const positionByFund = new Map<string, PositionRecord>()
-
-  ;(input?.positions ?? []).forEach((position) => {
-    positionByFund.set(position.fundCode, {
-      fundCode: position.fundCode,
-      mine: { ...position.mine },
-      blogger: { ...position.blogger },
-      updatedAt: position.updatedAt || now,
-    })
-  })
-  ;(input?.holdings ?? []).forEach((holding) => {
-    if (positionByFund.has(holding.fundCode)) return
-    positionByFund.set(holding.fundCode, {
-      fundCode: holding.fundCode,
-      mine: {
-        amount: holding.myAmount,
-        profit: holding.myProfit,
-        nav: holding.myNav,
-        navDate: holding.myNavDate,
-        startedAt: holding.myNavDate || toDateKey(holding.updatedAt),
-      },
-      blogger: {
-        amount: holding.bloggerAmount,
-        profit: holding.bloggerProfit,
-        nav: holding.bloggerNav,
-        navDate: holding.bloggerNavDate,
-        startedAt: holding.bloggerNavDate || toDateKey(holding.updatedAt),
-      },
-      updatedAt: holding.updatedAt || now,
-    })
-  })
-
-  const navHistory = (input?.navHistory ?? []).map((item) => ({
-    fundCode: item.fundCode,
-    points: compactNavPoints(item.points),
-    updatedAt: item.updatedAt || now,
-  }))
-
-  ;(input?.holdings ?? []).forEach((holding) => {
-    const points = compactNavPoints([
-      ...(navHistory.find((item) => item.fundCode === holding.fundCode)?.points ?? []),
-      ...(holding.myNavDate && holding.myNav > 0
-        ? [{ date: holding.myNavDate, value: holding.myNav }]
-        : []),
-      ...(holding.bloggerNavDate && holding.bloggerNav > 0
-        ? [{ date: holding.bloggerNavDate, value: holding.bloggerNav }]
-        : []),
-    ])
-    if (points.length === 0) return
-    const existing = navHistory.find((item) => item.fundCode === holding.fundCode)
-    if (existing) existing.points = points
-    else navHistory.push({ fundCode: holding.fundCode, points, updatedAt: now })
-  })
-
-  return {
-    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
-    budget: input?.budget ?? { myBudget: 0, bloggerBudget: 0 },
-    aiConfig: input?.aiConfig ?? { baseURL: '', apiKey: '', model: '' },
-    funds,
-    positions: [...positionByFund.values()],
-    operations: input?.operations ?? [],
-    navHistory,
-    snapshots: compactSnapshots(input?.snapshots ?? input?.history ?? []),
-    holdingSnapshots: compactHoldingSnapshots(input?.holdingSnapshots ?? input?.holdingHistory ?? []),
-    updatedAt: input?.updatedAt ?? formatDateKey(new Date()),
-  }
 }
 
 export function mergeNavHistory(
   current: FundNavHistory[],
   updates: Array<{ fundCode: string; points: FundNavPoint[] }>,
 ): FundNavHistory[] {
-  const byFund = new Map(current.map((item) => [item.fundCode, { ...item, points: [...item.points] }]))
-  const now = new Date().toISOString()
+  const byFund = new Map(
+    current.map((item) => [
+      item.fundCode,
+      {
+        fundCode: item.fundCode,
+        points: compactNavPoints(item.points),
+        updatedAt: item.updatedAt,
+      },
+    ]),
+  )
+  const updatedAt = nowIso()
 
   updates.forEach((update) => {
-    const existing = byFund.get(update.fundCode)
-    byFund.set(update.fundCode, {
-      fundCode: update.fundCode,
+    const fundCode = update.fundCode.trim()
+    if (!fundCode) return
+    const existing = byFund.get(fundCode)
+    byFund.set(fundCode, {
+      fundCode,
       points: compactNavPoints([...(existing?.points ?? []), ...update.points]),
-      updatedAt: now,
+      updatedAt,
     })
   })
 
-  return [...byFund.values()]
+  return [...byFund.values()].sort((left, right) => left.fundCode.localeCompare(right.fundCode))
+}
+
+function buildNavMap(navHistory: FundNavHistory[]): Map<string, FundNavPoint[]> {
+  return new Map(
+    navHistory.map((item) => [item.fundCode, compactNavPoints(item.points)] as const),
+  )
+}
+
+function collectEventNavUpdates(
+  events: PortfolioEvent[],
+  throughDate?: string,
+): Array<{ fundCode: string; points: FundNavPoint[] }> {
+  const byFund = new Map<string, FundNavPoint[]>()
+
+  function addPoint(fundCode: string, date: string, nav: number): void {
+    if (!fundCode || !date || nav <= 0 || (throughDate && date > throughDate)) return
+    const points = byFund.get(fundCode) ?? []
+    points.push({ date, nav })
+    byFund.set(fundCode, points)
+  }
+
+  events.forEach((event) => {
+    if (event.kind === 'holding_snapshot') {
+      addPoint(event.fundCode, event.tradeDate, event.nav ?? 0)
+      return
+    }
+
+    if (event.type === 'buy') {
+      INVESTOR_SIDES.forEach((side) => addPoint(event.fundCode, event.tradeDate, event.navBySide?.[side] ?? 0))
+      return
+    }
+
+    if (event.type === 'sell') {
+      INVESTOR_SIDES.forEach((side) => addPoint(event.fundCode, event.tradeDate, event.navBySide?.[side] ?? 0))
+      return
+    }
+
+    INVESTOR_SIDES.forEach((side) => {
+      addPoint(event.fundCode, event.tradeDate, event.outNavBySide?.[side] ?? 0)
+      addPoint(event.targetFundCode, event.tradeDate, event.inNavBySide?.[side] ?? 0)
+    })
+  })
+
+  return [...byFund.entries()].map(([fundCode, points]) => ({ fundCode, points }))
+}
+
+function buildEffectiveNavMap(
+  state: PortfolioState,
+  events: PortfolioEvent[],
+  throughDate?: string,
+): Map<string, FundNavPoint[]> {
+  const navHistory = mergeNavHistory(state.navHistory, collectEventNavUpdates(events, throughDate))
+  return buildNavMap(navHistory)
+}
+
+function latestNav(points: FundNavPoint[], throughDate?: string): FundNavPoint | null {
+  const eligible = throughDate ? points.filter((point) => point.date <= throughDate) : points
+  return eligible.at(-1) ?? null
+}
+
+function previousNav(points: FundNavPoint[], date: string): FundNavPoint | null {
+  return [...points].reverse().find((point) => point.date < date) ?? null
+}
+
+function navOnDate(points: FundNavPoint[], date: string): FundNavPoint | null {
+  return points.find((point) => point.date === date) ?? null
+}
+
+function getBook(books: Map<string, FundBook>, code: string, name: string): FundBook {
+  const fundCode = code.trim()
+  const existing = books.get(fundCode)
+  if (existing) {
+    if (name.trim()) existing.fund.name = name.trim()
+    return existing
+  }
+
+  const book: FundBook = {
+    fund: { code: fundCode, name: name.trim() },
+    mine: createSidePosition(),
+    blogger: createSidePosition(),
+    pendingEvents: [],
+    eventCount: 0,
+  }
+  books.set(fundCode, book)
+  return book
+}
+
+function sortEvents(events: PortfolioEvent[]): PortfolioEvent[] {
+  return [...events].sort((left, right) => {
+    if (left.tradeDate === right.tradeDate) return left.recordedAt.localeCompare(right.recordedAt)
+    return left.tradeDate.localeCompare(right.tradeDate)
+  })
+}
+
+function normalizeSideValues(values: Partial<SideValues> | undefined): SideValues {
+  return {
+    mine: Number(values?.mine ?? 0),
+    blogger: Number(values?.blogger ?? 0),
+  }
+}
+
+function normalizeSnapshot(event: HoldingSnapshot): HoldingSnapshot | null {
+  const fundCode = event.fundCode.trim()
+  const tradeDate = normalizeDateKey(event.tradeDate)
+  if (!fundCode || !tradeDate) return null
+  return {
+    ...event,
+    fundCode,
+    fundName: event.fundName.trim(),
+    tradeDate,
+    recordedAt: event.recordedAt || nowIso(),
+    amount: roundMoney(event.amount),
+    profit: roundMoney(event.profit),
+    shares:
+      typeof event.shares === 'number' && event.shares > 0 ? roundShares(event.shares) : undefined,
+    nav: typeof event.nav === 'number' && event.nav > 0 ? event.nav : undefined,
+    source: event.source ?? 'manual',
+  }
+}
+
+function normalizeTrade(event: Trade): Trade | null {
+  const fundCode = event.fundCode.trim()
+  const tradeDate = normalizeDateKey(event.tradeDate)
+  if (!fundCode || !tradeDate) return null
+
+  if (event.type === 'buy') {
+    return {
+      ...event,
+      status: event.status ?? 'pending',
+      fundCode,
+      fundName: event.fundName.trim(),
+      tradeDate,
+      recordedAt: event.recordedAt || nowIso(),
+      amounts: normalizeSideValues(event.amounts),
+      navBySide: event.navBySide ? normalizeSideValues(event.navBySide) : undefined,
+      sharesBySide: event.sharesBySide ? normalizeSideValues(event.sharesBySide) : undefined,
+      feeBySide: event.feeBySide ? normalizeSideValues(event.feeBySide) : undefined,
+    }
+  }
+
+  if (event.type === 'sell') {
+    return {
+      ...event,
+      status: event.status ?? 'pending',
+      fundCode,
+      fundName: event.fundName.trim(),
+      tradeDate,
+      recordedAt: event.recordedAt || nowIso(),
+      sharesBySide: normalizeSideValues(event.sharesBySide),
+      navBySide: event.navBySide ? normalizeSideValues(event.navBySide) : undefined,
+      amountBySide: event.amountBySide ? normalizeSideValues(event.amountBySide) : undefined,
+      feeBySide: event.feeBySide ? normalizeSideValues(event.feeBySide) : undefined,
+    }
+  }
+
+  return {
+    ...event,
+    status: event.status ?? 'pending',
+    fundCode,
+    fundName: event.fundName.trim(),
+    targetFundCode: event.targetFundCode.trim(),
+    targetFundName: event.targetFundName.trim(),
+    tradeDate,
+    recordedAt: event.recordedAt || nowIso(),
+    outSharesBySide: normalizeSideValues(event.outSharesBySide),
+    outNavBySide: event.outNavBySide ? normalizeSideValues(event.outNavBySide) : undefined,
+    inSharesBySide: event.inSharesBySide ? normalizeSideValues(event.inSharesBySide) : undefined,
+    inNavBySide: event.inNavBySide ? normalizeSideValues(event.inNavBySide) : undefined,
+    feeBySide: event.feeBySide ? normalizeSideValues(event.feeBySide) : undefined,
+  }
+}
+
+function normalizeEvent(event: PortfolioEvent): PortfolioEvent | null {
+  return event.kind === 'holding_snapshot' ? normalizeSnapshot(event) : normalizeTrade(event)
+}
+
+function updateSnapshot(position: SidePosition, snapshot: HoldingSnapshot): SidePosition {
+  const amount = Math.max(snapshot.amount, 0)
+  const cost = Math.max(amount - snapshot.profit, 0)
+  const shares = snapshot.shares && snapshot.shares > 0 ? snapshot.shares : 0
+
+  if (amount <= 0.01 && shares <= 0.0001) {
+    return {
+      ...createSidePosition(),
+      realizedProfit: position.realizedProfit,
+      lastSnapshotDate: snapshot.tradeDate,
+    }
+  }
+
+  return {
+    shares,
+    cost: shares > 0 ? roundMoney(cost) : 0,
+    unknownAmount: shares > 0 ? 0 : roundMoney(amount),
+    unknownCost: shares > 0 ? 0 : roundMoney(cost),
+    unknownProfit: shares > 0 ? 0 : roundMoney(snapshot.profit),
+    realizedProfit: position.realizedProfit,
+    lastSnapshotAmount: roundMoney(amount),
+    lastSnapshotProfit: roundMoney(snapshot.profit),
+    lastSnapshotDate: snapshot.tradeDate,
+  }
+}
+
+function addKnownPosition(
+  position: SidePosition,
+  shares: number,
+  cost: number,
+): SidePosition {
+  if (shares <= 0.0001 || cost <= 0.01) return position
+  return {
+    ...position,
+    shares: roundShares(position.shares + shares),
+    cost: roundMoney(position.cost + cost),
+  }
+}
+
+function reduceUnknownPosition(
+  position: SidePosition,
+  cashAmount: number,
+  fee: number,
+): SidePosition {
+  if (position.unknownAmount <= 0.01 || cashAmount <= 0.01) return position
+
+  const reductionRatio = Math.min(cashAmount / position.unknownAmount, 1)
+  const reducedAmount = position.unknownAmount * reductionRatio
+  const reducedCost = position.unknownCost * reductionRatio
+  const reducedProfit = position.unknownProfit * reductionRatio
+  const realizedProfit = cashAmount - fee - reducedCost
+
+  return {
+    ...position,
+    unknownAmount: roundMoney(position.unknownAmount - reducedAmount),
+    unknownCost: roundMoney(position.unknownCost - reducedCost),
+    unknownProfit: roundMoney(position.unknownProfit - reducedProfit),
+    realizedProfit: roundMoney(position.realizedProfit + realizedProfit),
+    lastSnapshotAmount: roundMoney(Math.max(position.lastSnapshotAmount - reducedAmount, 0)),
+    lastSnapshotProfit: roundMoney(position.lastSnapshotProfit - reducedProfit),
+  }
+}
+
+function reduceKnownPosition(
+  position: SidePosition,
+  shares: number,
+  cashAmount: number,
+  fee: number,
+): SidePosition {
+  if (shares <= 0.0001) return position
+
+  if (position.shares <= 0.0001) {
+    return reduceUnknownPosition(position, cashAmount, fee)
+  }
+
+  const outShares = Math.min(shares, position.shares)
+  const knownRatio = outShares / shares
+  const knownCashAmount = cashAmount * knownRatio
+  const knownFee = fee * knownRatio
+  const shareRatio = outShares / position.shares
+  const reducedCost = position.cost * shareRatio
+  const realizedProfit = knownCashAmount - knownFee - reducedCost
+  const remainingShares = position.shares - outShares
+  const remainingCost = position.cost - reducedCost
+
+  const reducedKnownPosition =
+    remainingShares <= 0.0001
+      ? {
+          ...position,
+          shares: 0,
+          cost: 0,
+          realizedProfit: roundMoney(position.realizedProfit + realizedProfit),
+        }
+      : {
+          ...position,
+          shares: roundShares(remainingShares),
+          cost: roundMoney(remainingCost),
+          realizedProfit: roundMoney(position.realizedProfit + realizedProfit),
+        }
+
+  if (outShares >= shares || position.unknownAmount <= 0.01) return reducedKnownPosition
+
+  return reduceUnknownPosition(
+    reducedKnownPosition,
+    Math.max(cashAmount - knownCashAmount, 0),
+    Math.max(fee - knownFee, 0),
+  )
+}
+
+function applyTradeToSide(position: SidePosition, trade: Trade, side: keyof SideValues) {
+  if (trade.type === 'buy') {
+    return addKnownPosition(
+      position,
+      trade.sharesBySide?.[side] ?? 0,
+      trade.amounts[side] + (trade.feeBySide?.[side] ?? 0),
+    )
+  }
+
+  if (trade.type === 'sell') {
+    return reduceKnownPosition(
+      position,
+      trade.sharesBySide[side],
+      trade.amountBySide?.[side] ?? 0,
+      trade.feeBySide?.[side] ?? 0,
+    )
+  }
+
+  return reduceKnownPosition(
+    position,
+    trade.outSharesBySide[side],
+    trade.outSharesBySide[side] * (trade.outNavBySide?.[side] ?? 0),
+    trade.feeBySide?.[side] ?? 0,
+  )
+}
+
+function valuesToShares(amounts: SideValues, nav: number): SideValues {
+  return {
+    mine: nav > 0 ? roundShares(amounts.mine / nav) : 0,
+    blogger: nav > 0 ? roundShares(amounts.blogger / nav) : 0,
+  }
+}
+
+function valuesByShares(shares: SideValues, nav: number): SideValues {
+  return {
+    mine: roundMoney(shares.mine * nav),
+    blogger: roundMoney(shares.blogger * nav),
+  }
+}
+
+function settleTrade(trade: Trade, navByFund: Map<string, FundNavPoint[]>): Trade | null {
+  if (trade.status === 'settled') return trade
+
+  const sourceNav = navOnDate(navByFund.get(trade.fundCode) ?? [], trade.tradeDate)
+  if (!sourceNav) return null
+  const navBySide = { mine: sourceNav.nav, blogger: sourceNav.nav }
+  const settledAt = nowIso()
+
+  if (trade.type === 'buy') {
+    return {
+      ...trade,
+      status: 'settled',
+      settledAt,
+      navBySide,
+      sharesBySide: valuesToShares(trade.amounts, sourceNav.nav),
+      feeBySide: trade.feeBySide ?? { mine: 0, blogger: 0 },
+    }
+  }
+
+  if (trade.type === 'sell') {
+    return {
+      ...trade,
+      status: 'settled',
+      settledAt,
+      navBySide,
+      amountBySide: valuesByShares(trade.sharesBySide, sourceNav.nav),
+      feeBySide: trade.feeBySide ?? { mine: 0, blogger: 0 },
+    }
+  }
+
+  const targetNav = navOnDate(navByFund.get(trade.targetFundCode) ?? [], trade.tradeDate)
+  if (!targetNav) return null
+  const convertedAmounts = valuesByShares(trade.outSharesBySide, sourceNav.nav)
+
+  return {
+    ...trade,
+    status: 'settled',
+    settledAt,
+    outNavBySide: navBySide,
+    inNavBySide: { mine: targetNav.nav, blogger: targetNav.nav },
+    inSharesBySide: valuesToShares(convertedAmounts, targetNav.nav),
+    feeBySide: trade.feeBySide ?? { mine: 0, blogger: 0 },
+  }
+}
+
+function applyEvent(books: Map<string, FundBook>, event: PortfolioEvent): void {
+  if (event.kind === 'holding_snapshot') {
+    const book = getBook(books, event.fundCode, event.fundName)
+    book[event.side] = updateSnapshot(book[event.side], event)
+    book.eventCount += 1
+    return
+  }
+
+  if (event.status !== 'settled') {
+    const sourceBook = getBook(books, event.fundCode, event.fundName)
+    sourceBook.pendingEvents.push(event)
+    sourceBook.eventCount += 1
+    if (event.type === 'convert') {
+      const targetBook = getBook(books, event.targetFundCode, event.targetFundName)
+      targetBook.pendingEvents.push(event)
+      targetBook.eventCount += 1
+    }
+    return
+  }
+
+  const source = getBook(books, event.fundCode, event.fundName)
+  INVESTOR_SIDES.forEach((side) => {
+    source[side] = applyTradeToSide(source[side], event, side)
+  })
+  source.eventCount += 1
+
+  if (event.type !== 'convert') return
+
+  const target = getBook(books, event.targetFundCode, event.targetFundName)
+  INVESTOR_SIDES.forEach((side) => {
+    const inShares = event.inSharesBySide?.[side] ?? 0
+    const inNav = event.inNavBySide?.[side] ?? 0
+    target[side] = addKnownPosition(target[side], inShares, inShares * inNav)
+  })
+  target.eventCount += 1
+}
+
+function seedBooks(funds: Fund[]): Map<string, FundBook> {
+  const books = new Map<string, FundBook>()
+  uniqueFunds(funds).forEach((fund) => {
+    books.set(fund.code, {
+      fund: { ...fund },
+      mine: createSidePosition(),
+      blogger: createSidePosition(),
+      pendingEvents: [],
+      eventCount: 0,
+    })
+  })
+  return books
+}
+
+function projectBooks(
+  state: PortfolioState,
+  navByFund: Map<string, FundNavPoint[]>,
+  options: ProjectionOptions = {},
+) {
+  const books = seedBooks(state.funds)
+  const events = sortEvents(state.events)
+    .map(normalizeEvent)
+    .filter((event): event is PortfolioEvent => Boolean(event))
+    .filter((event) => !options.throughDate || event.tradeDate <= options.throughDate)
+    .map((event) => {
+      if (event.kind === 'holding_snapshot') return event
+      return settleTrade(event, navByFund) ?? event
+    })
+
+  events.forEach((event) => applyEvent(books, event))
+
+  return { books, events }
+}
+
+function sideMarketValue(
+  position: SidePosition,
+  points: FundNavPoint[],
+  throughDate?: string,
+): {
+  amount: number
+  cost: number
+  profit: number
+  profitRate: number
+  todayProfit: number | null
+  latestNav: number | null
+  latestNavDate: string
+  shares: number
+} {
+  const latest = latestNav(points, throughDate)
+  const previous = latest ? previousNav(points, latest.date) : null
+  const unknownShares =
+    latest && position.unknownAmount > 0.01 ? position.unknownAmount / latest.nav : 0
+  const activeShares = position.shares + unknownShares
+  const hasKnownShares = position.shares > 0.0001
+  const fallbackKnownAmount = hasKnownShares ? position.lastSnapshotAmount || position.cost : 0
+  const knownAmount = latest && hasKnownShares ? position.shares * latest.nav : fallbackKnownAmount
+  const knownProfit = hasKnownShares
+    ? latest
+      ? knownAmount - position.cost
+      : position.lastSnapshotProfit || knownAmount - position.cost
+    : 0
+  const amount = roundMoney(position.unknownAmount + knownAmount)
+  const cost = roundMoney(position.unknownCost + position.cost)
+  const profit = roundMoney(position.unknownProfit + knownProfit)
+  const todayProfit =
+    latest && previous && activeShares > 0.0001
+      ? roundMoney(activeShares * (latest.nav - previous.nav))
+      : null
+
+  return {
+    amount,
+    cost,
+    profit,
+    profitRate: profitRate(cost, profit),
+    todayProfit,
+    latestNav: latest?.nav ?? null,
+    latestNavDate: latest?.date ?? '',
+    shares: roundShares(activeShares),
+  }
+}
+
+function toHoldingRow(
+  book: FundBook,
+  points: FundNavPoint[],
+  totals: Pick<PortfolioTotals, 'myCost' | 'bloggerCost'>,
+  targetRatio: number,
+  throughDate?: string,
+): HoldingRow {
+  const mine = sideMarketValue(book.mine, points, throughDate)
+  const blogger = sideMarketValue(book.blogger, points, throughDate)
+  const latestNavPoint = latestNav(points, throughDate)
+  const myInvested = mine.cost
+  const bloggerInvested = blogger.cost
+  const targetInvested = targetRatio > 0 ? bloggerInvested / targetRatio : 0
+
+  return {
+    id: book.fund.code,
+    fundCode: book.fund.code,
+    fundName: book.fund.name,
+    myAmount: mine.amount,
+    myCost: mine.cost,
+    myShares: mine.shares,
+    myProfit: mine.profit,
+    myProfitRate: mine.profitRate,
+    myTodayProfit: mine.todayProfit,
+    bloggerAmount: blogger.amount,
+    bloggerCost: blogger.cost,
+    bloggerShares: blogger.shares,
+    bloggerProfit: blogger.profit,
+    bloggerProfitRate: blogger.profitRate,
+    bloggerTodayProfit: blogger.todayProfit,
+    myInvested,
+    bloggerInvested,
+    targetInvested,
+    myPositionRate: totals.myCost > 0 ? (myInvested / totals.myCost) * 100 : 0,
+    bloggerPositionRate:
+      totals.bloggerCost > 0 ? (bloggerInvested / totals.bloggerCost) * 100 : 0,
+    latestNav: latestNavPoint?.nav ?? mine.latestNav ?? blogger.latestNav,
+    latestNavDate: latestNavPoint?.date ?? mine.latestNavDate ?? blogger.latestNavDate,
+    lastSnapshotDate: [book.mine.lastSnapshotDate, book.blogger.lastSnapshotDate].sort().at(-1) ?? '',
+    pendingEvents: book.pendingEvents,
+    eventCount: book.eventCount,
+  }
+}
+
+function computeTotalsFromBooks(
+  books: FundBook[],
+  navByFund: Map<string, FundNavPoint[]>,
+  throughDate?: string,
+): PortfolioTotals {
+  const totals = emptyTotals()
+  let hasMyTodayProfit = false
+  let hasBloggerTodayProfit = false
+
+  books.forEach((book) => {
+    const points = navByFund.get(book.fund.code) ?? []
+    const mine = sideMarketValue(book.mine, points, throughDate)
+    const blogger = sideMarketValue(book.blogger, points, throughDate)
+    totals.myAmount += mine.amount
+    totals.bloggerAmount += blogger.amount
+    totals.myCost += mine.cost
+    totals.bloggerCost += blogger.cost
+    totals.myProfit += mine.profit
+    totals.bloggerProfit += blogger.profit
+    if (mine.todayProfit !== null) {
+      totals.myTodayProfit = (totals.myTodayProfit ?? 0) + mine.todayProfit
+      hasMyTodayProfit = true
+    }
+    if (blogger.todayProfit !== null) {
+      totals.bloggerTodayProfit = (totals.bloggerTodayProfit ?? 0) + blogger.todayProfit
+      hasBloggerTodayProfit = true
+    }
+  })
+
+  totals.myAmount = roundMoney(totals.myAmount)
+  totals.bloggerAmount = roundMoney(totals.bloggerAmount)
+  totals.myCost = roundMoney(totals.myCost)
+  totals.bloggerCost = roundMoney(totals.bloggerCost)
+  totals.myProfit = roundMoney(totals.myProfit)
+  totals.bloggerProfit = roundMoney(totals.bloggerProfit)
+  totals.myProfitRate = profitRate(totals.myCost, totals.myProfit)
+  totals.bloggerProfitRate = profitRate(totals.bloggerCost, totals.bloggerProfit)
+  totals.myTodayProfit = hasMyTodayProfit ? roundMoney(totals.myTodayProfit ?? 0) : null
+  totals.bloggerTodayProfit = hasBloggerTodayProfit
+    ? roundMoney(totals.bloggerTodayProfit ?? 0)
+    : null
+
+  return totals
+}
+
+function activeBooks(books: Map<string, FundBook>): FundBook[] {
+  return [...books.values()].filter(
+    (book) => isActivePosition(book.mine) || isActivePosition(book.blogger),
+  )
+}
+
+function buildHistory(state: PortfolioState): PortfolioHistoryPoint[] {
+  const dates = [
+    ...new Set(
+      state.events
+        .map((event) => normalizeDateKey(event.tradeDate))
+        .filter((date): date is string => Boolean(date)),
+    ),
+  ].sort()
+
+  return dates.map((date) => {
+    const initialNavByFund = buildEffectiveNavMap(state, [], date)
+    const { books, events } = projectBooks(state, initialNavByFund, { throughDate: date })
+    const navByFund = buildEffectiveNavMap(state, events, date)
+    const totals = computeTotalsFromBooks(activeBooks(books), navByFund, date)
+    return {
+      date,
+      myAmount: totals.myAmount,
+      bloggerAmount: totals.bloggerAmount,
+      myProfit: totals.myProfit,
+      bloggerProfit: totals.bloggerProfit,
+      myProfitRate: totals.myProfitRate,
+      bloggerProfitRate: totals.bloggerProfitRate,
+    }
+  })
+}
+
+export function projectPortfolio(state: PortfolioState): PortfolioProjection {
+  const normalized = normalizePortfolioState(state)
+  const initialNavByFund = buildEffectiveNavMap(normalized, [])
+  const { books, events } = projectBooks(normalized, initialNavByFund)
+  const navByFund = buildEffectiveNavMap(normalized, events)
+  const booksList = activeBooks(books)
+  const totals = computeTotalsFromBooks(booksList, navByFund)
+  const ratio = followRatio(normalized.settings)
+  const holdings = booksList
+    .map((book) => toHoldingRow(book, navByFund.get(book.fund.code) ?? [], totals, ratio.blogger))
+    .sort((left, right) => right.bloggerCost + right.myCost - (left.bloggerCost + left.myCost))
+  const funds = uniqueFunds([
+    ...normalized.funds,
+    ...events.flatMap((event) => {
+      if (event.kind === 'holding_snapshot') {
+        return [{ code: event.fundCode, name: event.fundName }]
+      }
+      if (event.type === 'convert') {
+        return [
+          { code: event.fundCode, name: event.fundName },
+          { code: event.targetFundCode, name: event.targetFundName },
+        ]
+      }
+      return [{ code: event.fundCode, name: event.fundName }]
+    }),
+  ])
+
+  return {
+    holdings,
+    totals,
+    history: buildHistory(normalized),
+    events: events.filter((event) => event.kind !== 'trade' || event.status !== 'pending'),
+    allEvents: events,
+    funds,
+  }
+}
+
+export function normalizePortfolioState(input: Partial<PortfolioState> | null | undefined): PortfolioState {
+  const events = (input?.events ?? [])
+    .map((event) => normalizeEvent(event as PortfolioEvent))
+    .filter((event): event is PortfolioEvent => Boolean(event))
+  const funds = uniqueFunds([
+    ...(input?.funds ?? []),
+    ...events.flatMap((event) => {
+      if (event.kind === 'holding_snapshot') return [{ code: event.fundCode, name: event.fundName }]
+      if ((event as Trade).type === 'convert') {
+        const convert = event as ConvertTrade
+        return [
+          { code: convert.fundCode, name: convert.fundName },
+          { code: convert.targetFundCode, name: convert.targetFundName },
+        ]
+      }
+      return [{ code: (event as Trade).fundCode, name: (event as Trade).fundName }]
+    }),
+  ])
+
+  return {
+    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
+    settings: {
+      myBudget: Number(input?.settings?.myBudget ?? 0),
+      bloggerBudget: Number(input?.settings?.bloggerBudget ?? 0),
+      aiBaseURL: String(input?.settings?.aiBaseURL ?? ''),
+      aiApiKey: String(input?.settings?.aiApiKey ?? ''),
+      aiModel: String(input?.settings?.aiModel ?? ''),
+    },
+    funds,
+    events,
+    navHistory: (input?.navHistory ?? []).map((item) => ({
+      fundCode: item.fundCode,
+      points: compactNavPoints(item.points),
+      updatedAt: item.updatedAt || nowIso(),
+    })),
+    updatedAt: input?.updatedAt || nowIso(),
+  }
+}
+
+export function getKnownSidePosition(
+  state: PortfolioState,
+  fundCode: string,
+  side: keyof SideValues,
+): SidePosition {
+  const normalized = normalizePortfolioState(state)
+  const navByFund = buildEffectiveNavMap(normalized, [])
+  const { books } = projectBooks(normalized, navByFund)
+  return cloneSidePosition(books.get(fundCode)?.[side] ?? createSidePosition())
+}
+
+export function createEmptyPortfolioState(): PortfolioState {
+  return {
+    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
+    settings: {
+      myBudget: 0,
+      bloggerBudget: 0,
+      aiBaseURL: '',
+      aiApiKey: '',
+      aiModel: '',
+    },
+    funds: [],
+    events: [],
+    navHistory: [],
+    updatedAt: '',
+  }
 }
