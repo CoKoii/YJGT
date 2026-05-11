@@ -4,12 +4,9 @@ export type TradeType = 'buy' | 'sell' | 'convert'
 
 export type TradeStatus = 'pending' | 'settled'
 
-export type CashFlowDirection = 'out' | 'in'
-
 export type Fund = {
   code: string
   name: string
-  archivedAt?: string
 }
 
 export type SideValues = Record<InvestorSide, number>
@@ -41,7 +38,7 @@ export type BuyTrade = {
   id: string
   kind: 'trade'
   type: 'buy'
-  status?: TradeStatus
+  status: TradeStatus
   fundCode: string
   fundName: string
   tradeDate: string
@@ -57,7 +54,7 @@ export type SellTrade = {
   id: string
   kind: 'trade'
   type: 'sell'
-  status?: TradeStatus
+  status: TradeStatus
   fundCode: string
   fundName: string
   tradeDate: string
@@ -73,7 +70,7 @@ export type ConvertTrade = {
   id: string
   kind: 'trade'
   type: 'convert'
-  status?: TradeStatus
+  status: TradeStatus
   fundCode: string
   fundName: string
   targetFundCode: string
@@ -103,12 +100,20 @@ export type FundNavHistory = {
   updatedAt: string
 }
 
+export type PortfolioCache = {
+  historyVersion: number
+  sourceRevision: number
+  history: PortfolioHistoryPoint[]
+  updatedAt: string
+}
+
 export type PortfolioState = {
-  schemaVersion: number
+  sourceRevision: number
   settings: Settings
   funds: Fund[]
   events: PortfolioEvent[]
   navHistory: FundNavHistory[]
+  cache: PortfolioCache
   updatedAt: string
 }
 
@@ -178,7 +183,6 @@ export type PortfolioHistoryPoint = {
 export type PortfolioProjection = {
   holdings: HoldingRow[]
   totals: PortfolioTotals
-  history: PortfolioHistoryPoint[]
   events: PortfolioEvent[]
   allEvents: PortfolioEvent[]
   funds: Fund[]

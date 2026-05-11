@@ -1,6 +1,14 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
-import type { AiChatMessage, HoldingRow, PortfolioTotals, RecognizedHolding, Settings } from '@/types/portfolio'
+import type {
+  AiChatMessage,
+  HoldingRow,
+  PortfolioEvent,
+  PortfolioHistoryPoint,
+  PortfolioTotals,
+  RecognizedHolding,
+  Settings,
+} from '@/types/portfolio'
 
 function normalizeAiBaseUrl(baseURL: string): string {
   return baseURL
@@ -80,16 +88,26 @@ export async function recognizeHoldingImages(
 }
 
 function buildPortfolioContext({
+  settings,
   holdings,
   totals,
+  history,
+  events,
 }: {
+  settings: Settings
   holdings: HoldingRow[]
   totals: PortfolioTotals
+  history: PortfolioHistoryPoint[]
+  events: PortfolioEvent[]
 }): string {
   return JSON.stringify(
     {
       rule:
         '这些组合数据全部由源事件账本投影而来。金额、份额、成本、收益都不得反推编造；没有的字段就说明数据不足。',
+      settings: {
+        myBudget: settings.myBudget,
+        bloggerBudget: settings.bloggerBudget,
+      },
       totals,
       holdings: holdings.map((holding) => ({
         fundCode: holding.fundCode,
@@ -115,7 +133,41 @@ function buildPortfolioContext({
         latestNav: holding.latestNav,
         latestNavDate: holding.latestNavDate,
         lastSnapshotDate: holding.lastSnapshotDate,
+        pendingEvents: holding.pendingEvents.map((event) => ({
+          id: event.id,
+          type: event.type,
+          tradeDate: event.tradeDate,
+          status: event.status,
+        })),
       })),
+      history: history.slice(-60),
+      events: events.slice(-120).map((event) =>
+        event.kind === 'holding_snapshot'
+          ? {
+              id: event.id,
+              kind: event.kind,
+              fundCode: event.fundCode,
+              fundName: event.fundName,
+              side: event.side,
+              tradeDate: event.tradeDate,
+              amount: event.amount,
+              profit: event.profit,
+              shares: event.shares ?? null,
+              nav: event.nav ?? null,
+              source: event.source,
+            }
+          : {
+              id: event.id,
+              kind: event.kind,
+              type: event.type,
+              status: event.status,
+              tradeDate: event.tradeDate,
+              fundCode: event.fundCode,
+              fundName: event.fundName,
+              targetFundCode: event.type === 'convert' ? event.targetFundCode : null,
+              targetFundName: event.type === 'convert' ? event.targetFundName : null,
+            },
+      ),
     },
     null,
     2,
@@ -125,18 +177,22 @@ function buildPortfolioContext({
 export async function streamPortfolioChat({
   settings,
   messages,
+  history,
+  events,
   holdings,
   totals,
   onDelta,
 }: {
   settings: Settings
   messages: AiChatMessage[]
+  history: PortfolioHistoryPoint[]
+  events: PortfolioEvent[]
   holdings: HoldingRow[]
   totals: PortfolioTotals
   onDelta: (delta: string) => void
 }): Promise<void> {
   const model = createModel(settings, 0.2)
-  const context = buildPortfolioContext({ holdings, totals })
+  const context = buildPortfolioContext({ settings, holdings, totals, history, events })
   const stream = await model.stream([
     new SystemMessage(
       '你是基金跟投分析助手。只能基于用户提供的源账本投影数据分析，不要编造交易记录、份额、成本或收益。' +

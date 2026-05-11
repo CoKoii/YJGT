@@ -1,11 +1,11 @@
-import { INVESTOR_SIDES, PORTFOLIO_SCHEMA_VERSION } from '@/constants/portfolio'
+import { INVESTOR_SIDES } from '@/constants/portfolio'
 import type {
-  ConvertTrade,
   Fund,
   FundNavHistory,
   FundNavPoint,
   HoldingRow,
   HoldingSnapshot,
+  PortfolioCache,
   PortfolioEvent,
   PortfolioHistoryPoint,
   PortfolioProjection,
@@ -29,6 +29,9 @@ type FundBook = {
 type ProjectionOptions = {
   throughDate?: string
 }
+
+const MAX_HISTORY_POINTS = 180
+export const PORTFOLIO_HISTORY_VERSION = 1
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -77,7 +80,25 @@ function normalizeFund(fund: Fund): Fund | null {
   return {
     code,
     name: fund.name.trim(),
-    archivedAt: fund.archivedAt,
+  }
+}
+
+function createEmptySettings() {
+  return {
+    myBudget: 0,
+    bloggerBudget: 0,
+    aiBaseURL: '',
+    aiApiKey: '',
+    aiModel: '',
+  }
+}
+
+function createEmptyCache(): PortfolioCache {
+  return {
+    historyVersion: PORTFOLIO_HISTORY_VERSION,
+    sourceRevision: 0,
+    history: [],
+    updatedAt: '',
   }
 }
 
@@ -244,13 +265,13 @@ function normalizeSnapshot(event: HoldingSnapshot): HoldingSnapshot | null {
     fundCode,
     fundName: event.fundName.trim(),
     tradeDate,
-    recordedAt: event.recordedAt || nowIso(),
+    recordedAt: event.recordedAt,
     amount: roundMoney(event.amount),
     profit: roundMoney(event.profit),
     shares:
       typeof event.shares === 'number' && event.shares > 0 ? roundShares(event.shares) : undefined,
     nav: typeof event.nav === 'number' && event.nav > 0 ? event.nav : undefined,
-    source: event.source ?? 'manual',
+    source: event.source,
   }
 }
 
@@ -262,11 +283,11 @@ function normalizeTrade(event: Trade): Trade | null {
   if (event.type === 'buy') {
     return {
       ...event,
-      status: event.status ?? 'pending',
+      status: event.status,
       fundCode,
       fundName: event.fundName.trim(),
       tradeDate,
-      recordedAt: event.recordedAt || nowIso(),
+      recordedAt: event.recordedAt,
       amounts: normalizeSideValues(event.amounts),
       navBySide: event.navBySide ? normalizeSideValues(event.navBySide) : undefined,
       sharesBySide: event.sharesBySide ? normalizeSideValues(event.sharesBySide) : undefined,
@@ -277,11 +298,11 @@ function normalizeTrade(event: Trade): Trade | null {
   if (event.type === 'sell') {
     return {
       ...event,
-      status: event.status ?? 'pending',
+      status: event.status,
       fundCode,
       fundName: event.fundName.trim(),
       tradeDate,
-      recordedAt: event.recordedAt || nowIso(),
+      recordedAt: event.recordedAt,
       sharesBySide: normalizeSideValues(event.sharesBySide),
       navBySide: event.navBySide ? normalizeSideValues(event.navBySide) : undefined,
       amountBySide: event.amountBySide ? normalizeSideValues(event.amountBySide) : undefined,
@@ -291,13 +312,13 @@ function normalizeTrade(event: Trade): Trade | null {
 
   return {
     ...event,
-    status: event.status ?? 'pending',
+    status: event.status,
     fundCode,
     fundName: event.fundName.trim(),
     targetFundCode: event.targetFundCode.trim(),
     targetFundName: event.targetFundName.trim(),
     tradeDate,
-    recordedAt: event.recordedAt || nowIso(),
+    recordedAt: event.recordedAt,
     outSharesBySide: normalizeSideValues(event.outSharesBySide),
     outNavBySide: event.outNavBySide ? normalizeSideValues(event.outNavBySide) : undefined,
     inSharesBySide: event.inSharesBySide ? normalizeSideValues(event.inSharesBySide) : undefined,
@@ -308,6 +329,17 @@ function normalizeTrade(event: Trade): Trade | null {
 
 function normalizeEvent(event: PortfolioEvent): PortfolioEvent | null {
   return event.kind === 'holding_snapshot' ? normalizeSnapshot(event) : normalizeTrade(event)
+}
+
+function fundsFromEvent(event: PortfolioEvent): Fund[] {
+  if (event.kind === 'holding_snapshot') return [{ code: event.fundCode, name: event.fundName }]
+  if (event.type === 'convert') {
+    return [
+      { code: event.fundCode, name: event.fundName },
+      { code: event.targetFundCode, name: event.targetFundName },
+    ]
+  }
+  return [{ code: event.fundCode, name: event.fundName }]
 }
 
 function updateSnapshot(position: SidePosition, snapshot: HoldingSnapshot): SidePosition {
@@ -717,20 +749,25 @@ function activeBooks(books: Map<string, FundBook>): FundBook[] {
   )
 }
 
-function buildHistory(state: PortfolioState): PortfolioHistoryPoint[] {
+export function projectPortfolioHistory(state: PortfolioState): PortfolioHistoryPoint[] {
+  const normalized = normalizePortfolioState(state)
+  const navByFund = buildEffectiveNavMap(normalized, normalized.events)
   const dates = [
-    ...new Set(
-      state.events
+    ...new Set([
+      ...normalized.events
         .map((event) => normalizeDateKey(event.tradeDate))
         .filter((date): date is string => Boolean(date)),
-    ),
-  ].sort()
+      ...[...navByFund.values()].flatMap((points) => points.map((point) => point.date)),
+    ]),
+  ]
+    .sort()
+    .slice(-MAX_HISTORY_POINTS)
 
   return dates.map((date) => {
-    const initialNavByFund = buildEffectiveNavMap(state, [], date)
-    const { books, events } = projectBooks(state, initialNavByFund, { throughDate: date })
-    const navByFund = buildEffectiveNavMap(state, events, date)
-    const totals = computeTotalsFromBooks(activeBooks(books), navByFund, date)
+    const initialNavByFund = buildEffectiveNavMap(normalized, [], date)
+    const { books, events } = projectBooks(normalized, initialNavByFund, { throughDate: date })
+    const effectiveNavByFund = buildEffectiveNavMap(normalized, events, date)
+    const totals = computeTotalsFromBooks(activeBooks(books), effectiveNavByFund, date)
     return {
       date,
       myAmount: totals.myAmount,
@@ -754,26 +791,11 @@ export function projectPortfolio(state: PortfolioState): PortfolioProjection {
   const holdings = booksList
     .map((book) => toHoldingRow(book, navByFund.get(book.fund.code) ?? [], totals, ratio.blogger))
     .sort((left, right) => right.bloggerCost + right.myCost - (left.bloggerCost + left.myCost))
-  const funds = uniqueFunds([
-    ...normalized.funds,
-    ...events.flatMap((event) => {
-      if (event.kind === 'holding_snapshot') {
-        return [{ code: event.fundCode, name: event.fundName }]
-      }
-      if (event.type === 'convert') {
-        return [
-          { code: event.fundCode, name: event.fundName },
-          { code: event.targetFundCode, name: event.targetFundName },
-        ]
-      }
-      return [{ code: event.fundCode, name: event.fundName }]
-    }),
-  ])
+  const funds = uniqueFunds([...normalized.funds, ...events.flatMap(fundsFromEvent)])
 
   return {
     holdings,
     totals,
-    history: buildHistory(normalized),
     events: events.filter((event) => event.kind !== 'trade' || event.status !== 'pending'),
     allEvents: events,
     funds,
@@ -784,23 +806,11 @@ export function normalizePortfolioState(input: Partial<PortfolioState> | null | 
   const events = (input?.events ?? [])
     .map((event) => normalizeEvent(event as PortfolioEvent))
     .filter((event): event is PortfolioEvent => Boolean(event))
-  const funds = uniqueFunds([
-    ...(input?.funds ?? []),
-    ...events.flatMap((event) => {
-      if (event.kind === 'holding_snapshot') return [{ code: event.fundCode, name: event.fundName }]
-      if ((event as Trade).type === 'convert') {
-        const convert = event as ConvertTrade
-        return [
-          { code: convert.fundCode, name: convert.fundName },
-          { code: convert.targetFundCode, name: convert.targetFundName },
-        ]
-      }
-      return [{ code: (event as Trade).fundCode, name: (event as Trade).fundName }]
-    }),
-  ])
+  const funds = uniqueFunds([...(input?.funds ?? []), ...events.flatMap(fundsFromEvent)])
+  const sourceRevision = Number(input?.sourceRevision ?? 0)
 
   return {
-    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
+    sourceRevision,
     settings: {
       myBudget: Number(input?.settings?.myBudget ?? 0),
       bloggerBudget: Number(input?.settings?.bloggerBudget ?? 0),
@@ -815,6 +825,26 @@ export function normalizePortfolioState(input: Partial<PortfolioState> | null | 
       points: compactNavPoints(item.points),
       updatedAt: item.updatedAt || nowIso(),
     })),
+    cache:
+      input?.cache &&
+      input.cache.historyVersion === PORTFOLIO_HISTORY_VERSION &&
+      input.cache.sourceRevision === sourceRevision
+        ? {
+            historyVersion: PORTFOLIO_HISTORY_VERSION,
+            sourceRevision,
+            history: (input.cache.history ?? []).filter(
+              (point): point is PortfolioHistoryPoint =>
+                typeof point?.date === 'string' &&
+                Number.isFinite(point?.myAmount) &&
+                Number.isFinite(point?.bloggerAmount) &&
+                Number.isFinite(point?.myProfit) &&
+                Number.isFinite(point?.bloggerProfit) &&
+                Number.isFinite(point?.myProfitRate) &&
+                Number.isFinite(point?.bloggerProfitRate),
+            ),
+            updatedAt: input.cache.updatedAt || nowIso(),
+          }
+        : createEmptyCache(),
     updatedAt: input?.updatedAt || nowIso(),
   }
 }
@@ -832,17 +862,12 @@ export function getKnownSidePosition(
 
 export function createEmptyPortfolioState(): PortfolioState {
   return {
-    schemaVersion: PORTFOLIO_SCHEMA_VERSION,
-    settings: {
-      myBudget: 0,
-      bloggerBudget: 0,
-      aiBaseURL: '',
-      aiApiKey: '',
-      aiModel: '',
-    },
+    sourceRevision: 0,
+    settings: createEmptySettings(),
     funds: [],
     events: [],
     navHistory: [],
+    cache: createEmptyCache(),
     updatedAt: '',
   }
 }

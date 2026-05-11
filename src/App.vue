@@ -4,6 +4,7 @@ import { BarChartOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { UploadChangeParam, UploadFile } from 'ant-design-vue'
 import DetailModal from '@/components/DetailModal.vue'
+import { getKnownSidePosition } from '@/domain/portfolio'
 import HistoryCard from '@/components/HistoryCard.vue'
 import OverviewPanel from '@/components/OverviewPanel.vue'
 import OperationDetailModal from '@/components/OperationDetailModal.vue'
@@ -320,6 +321,12 @@ function syncCurrentHoldingNavs(): Promise<void> {
   )
 }
 
+function syncNavSilently(fundCodes: string[], fallbackMessage: string): void {
+  void syncNavForFunds(fundCodes, true).catch((error) => {
+    message.warning(error instanceof Error ? error.message : fallbackMessage)
+  })
+}
+
 async function saveSnapshot(): Promise<void> {
   if (!validateFund(snapshotForm.fundCode, snapshotForm.fundName)) {
     return
@@ -344,7 +351,8 @@ async function saveSnapshot(): Promise<void> {
     },
   })
   isSnapshotOpen.value = false
-  message.success('买入操作已记录，待净值结算后自动流转')
+  message.success('买入操作已记录，当前先按待结算处理')
+  syncNavSilently([snapshotForm.fundCode.trim()], '买入已记录，净值同步失败')
 }
 
 function hasAnyValue(values: SideValues): boolean {
@@ -352,7 +360,9 @@ function hasAnyValue(values: SideValues): boolean {
 }
 
 function validateKnownShares(row: HoldingRow, shares: SideValues): boolean {
-  if (shares.mine > row.myShares + 0.0001 || shares.blogger > row.bloggerShares + 0.0001) {
+  const myKnownShares = getKnownSidePosition(store.$state, row.fundCode, 'mine').shares
+  const bloggerKnownShares = getKnownSidePosition(store.$state, row.fundCode, 'blogger').shares
+  if (shares.mine > myKnownShares + 0.0001 || shares.blogger > bloggerKnownShares + 0.0001) {
     message.warning('卖出或转出份额不能超过当前已确认份额')
     return false
   }
@@ -392,6 +402,7 @@ async function saveTrade(): Promise<void> {
   }
 
   try {
+    const navFundCodes = [tradeForm.fundCode]
     if (tradeForm.type === 'buy') {
       if (!hasAnyValue(tradeForm.amounts)) {
         message.warning('请填写博主金额或我的金额')
@@ -416,6 +427,7 @@ async function saveTrade(): Promise<void> {
     } else {
       if (!validateFund(tradeForm.targetFundCode, tradeForm.targetFundName)) return
       if (!hasAnyValue(tradeForm.shares) || !validateKnownShares(row, tradeForm.shares)) return
+      navFundCodes.push(tradeForm.targetFundCode)
       store.addTrade({
         type: 'convert',
         fundCode: tradeForm.fundCode,
@@ -428,7 +440,8 @@ async function saveTrade(): Promise<void> {
     }
 
     isTradeOpen.value = false
-    message.success('操作已记录，待净值结算后自动流转')
+    message.success('操作已记录，当前先按待结算处理')
+    syncNavSilently(navFundCodes, '操作已记录，净值同步失败')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '操作保存失败')
   }
@@ -519,13 +532,10 @@ async function applyRecognizedSnapshots(): Promise<void> {
   recognizedRows.value = []
   message.success(`已写入 ${validRows.length} 条真实快照事件`)
 
-  void syncNavForFunds(
+  syncNavSilently(
     validRows.map((row) => row.fundCode),
-    true,
+    '快照已写入，净值同步失败',
   )
-    .catch((error) => {
-      message.warning(error instanceof Error ? error.message : '快照已写入，净值同步失败')
-    })
 }
 
 async function sendChatMessage(question: string): Promise<void> {
@@ -549,6 +559,8 @@ async function sendChatMessage(question: string): Promise<void> {
     await streamPortfolioChat({
       settings: store.settings,
       messages: chatMessages.value.filter((item) => item.id !== assistantMessage.id),
+      history: store.history,
+      events: store.allEvents,
       holdings: store.holdings,
       totals: store.totals,
       onDelta: (delta) => {
@@ -642,9 +654,10 @@ function removeOperationEvent(id: string): void {
 
 onMounted(() => {
   store.hydrate()
-  void syncCurrentHoldingNavs().catch((error) => {
-    message.warning(error instanceof Error ? error.message : '净值同步失败')
-  })
+  syncNavSilently(
+    store.holdings.map((holding) => holding.fundCode),
+    '净值同步失败',
+  )
 })
 
 watch(

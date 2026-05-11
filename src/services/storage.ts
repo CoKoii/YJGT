@@ -17,7 +17,7 @@ export function loadPortfolio(): PortfolioState {
 }
 
 export function savePortfolio(state: PortfolioState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizePortfolioState(state)))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 }
 
 export function clearPortfolio(): void {
