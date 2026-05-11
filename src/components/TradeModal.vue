@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { InvestorSide, SideValues, TradeType } from '@/types/portfolio'
+import type { HoldingRow, InvestorSide, SideValues, TradeType } from '@/types/portfolio'
 
 export type TradeForm = {
   type: TradeType
@@ -17,6 +17,8 @@ const props = defineProps<{
   form: TradeForm
   title: string
   loadingTargetFund: boolean
+  currentHolding: HoldingRow | null
+  formatNumber: (value: number) => string
 }>()
 
 const emit = defineEmits<{
@@ -67,6 +69,10 @@ function patchShare(side: InvestorSide, value: number): void {
     @ok="$emit('save')"
   >
     <a-form layout="vertical" class="dense-form">
+      <div v-if="currentHolding" class="holding-share-tip">
+        <span>博主持有份额：{{ formatNumber(currentHolding.bloggerShares) }}</span>
+        <span>我的持有份额：{{ formatNumber(currentHolding.myShares) }}</span>
+      </div>
       <a-row :gutter="[20, 20]">
         <template v-if="form.type === 'buy'">
           <a-col :span="12">

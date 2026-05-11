@@ -118,6 +118,9 @@ const followRatioText = computed(() => `${ratio.value.blogger || 0} : ${ratio.va
 const selectedHolding = computed(() => {
   return store.holdings.find((holding) => holding.fundCode === selectedHoldingCode.value) ?? null
 })
+const currentTradeHolding = computed(() => {
+  return store.holdings.find((holding) => holding.fundCode === tradeForm.fundCode) ?? null
+})
 const selectedNavPoints = ref<Array<{ date: string; nav: number }>>([])
 
 const tradeTitle = computed(() => {
@@ -766,6 +769,8 @@ watch(
         :form="tradeForm"
         :title="tradeTitle"
         :loading-target-fund="loadingTargetFund"
+        :current-holding="currentTradeHolding"
+        :format-number="formatNumber"
         @update:open="isTradeOpen = $event"
         @update:form="patchTradeForm"
         @save="saveTrade"

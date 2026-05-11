@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { HoldingRow, Trade, TradeType } from '@/types/portfolio'
 import { profitColorClass } from '@/utils/number'
 import {
@@ -10,7 +11,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons-vue'
 
-defineProps<{
+const props = defineProps<{
   rows: HoldingRow[]
   myTodayProfit: number | null
   bloggerTodayProfit: number | null
@@ -36,12 +37,43 @@ defineEmits<{
   (event: 'remove', row: HoldingRow): void
 }>()
 
-function formatOptionalMoney(formatMoney: (value: number) => string, value: number | null): string {
-  return value === null ? '--' : formatMoney(value)
+type SummaryMetric = {
+  label: string
+  value: number | null
+  rate: number | null
+  optional?: boolean
 }
 
-function formatOptionalPercent(formatPercent: (value: number) => string, value: number | null): string {
-  return value === null ? '--' : formatPercent(value)
+const summaryMetrics = computed<SummaryMetric[]>(() => [
+  {
+    label: '我的最新单日收益',
+    value: props.myTodayProfit,
+    rate: props.myTodayProfitRate,
+    optional: true,
+  },
+  {
+    label: '博主最新单日收益',
+    value: props.bloggerTodayProfit,
+    rate: props.bloggerTodayProfitRate,
+    optional: true,
+  },
+  {
+    label: '我的总收益',
+    value: props.myTotalProfit,
+    rate: props.myTotalProfitRate,
+  },
+  {
+    label: '博主总收益',
+    value: props.bloggerTotalProfit,
+    rate: props.bloggerTotalProfitRate,
+  },
+])
+
+function formatNullable(
+  formatter: (value: number) => string,
+  value: number | null,
+): string {
+  return value === null ? '--' : formatter(value)
 }
 
 function tradeLabel(type: TradeType): string {
@@ -57,40 +89,17 @@ function tradeLabel(type: TradeType): string {
       <template #buttons>
         <div class="portfolio-summary">
           <span class="portfolio-title">持仓列表</span>
-          <span class="summary-label">我的最新单日收益</span>
-          <span class="summary-profit">
-            <span class="profit-value" :class="profitColorClass(myTodayProfit)">{{
-              formatOptionalMoney(formatMoney, myTodayProfit)
-            }}</span>
-            <span class="summary-rate profit-value" :class="profitColorClass(myTodayProfitRate)">
-              {{ formatOptionalPercent(formatPercent, myTodayProfitRate) }}
+          <template v-for="item in summaryMetrics" :key="item.label">
+            <span class="summary-label">{{ item.label }}</span>
+            <span class="summary-profit">
+              <span class="profit-value" :class="profitColorClass(item.value)">
+                {{ item.optional ? formatNullable(props.formatMoney, item.value) : props.formatMoney(item.value ?? 0) }}
+              </span>
+              <span class="summary-rate profit-value" :class="profitColorClass(item.rate)">
+                {{ item.optional ? formatNullable(props.formatPercent, item.rate) : props.formatPercent(item.rate ?? 0) }}
+              </span>
             </span>
-          </span>
-          <span class="summary-label">博主最新单日收益</span>
-          <span class="summary-profit">
-            <span class="profit-value" :class="profitColorClass(bloggerTodayProfit)">{{
-              formatOptionalMoney(formatMoney, bloggerTodayProfit)
-            }}</span>
-            <span class="summary-rate profit-value" :class="profitColorClass(bloggerTodayProfitRate)">
-              {{ formatOptionalPercent(formatPercent, bloggerTodayProfitRate) }}
-            </span>
-          </span>
-          <span class="summary-label">我的总收益</span>
-          <span class="summary-profit">
-            <span class="profit-value" :class="profitColorClass(myTotalProfit)">{{ formatMoney(myTotalProfit) }}</span>
-            <span class="summary-rate profit-value" :class="profitColorClass(myTotalProfitRate)">
-              {{ formatPercent(myTotalProfitRate) }}
-            </span>
-          </span>
-          <span class="summary-label">博主总收益</span>
-          <span class="summary-profit">
-            <span class="profit-value" :class="profitColorClass(bloggerTotalProfit)">{{
-              formatMoney(bloggerTotalProfit)
-            }}</span>
-            <span class="summary-rate profit-value" :class="profitColorClass(bloggerTotalProfitRate)">
-              {{ formatPercent(bloggerTotalProfitRate) }}
-            </span>
-          </span>
+          </template>
         </div>
       </template>
       <template #tools>
@@ -126,7 +135,7 @@ function tradeLabel(type: TradeType): string {
 
     <div class="vxe-wrap">
       <vxe-table
-        :data="rows"
+        :data="props.rows"
         :row-config="{ isHover: true }"
         :column-config="{ resizable: true }"
         auto-resize
@@ -150,6 +159,14 @@ function tradeLabel(type: TradeType): string {
               >
                 {{ tradeLabel(row.pendingEvents[0].type) }}
               </button>
+            </div>
+          </template>
+        </vxe-column>
+        <vxe-column title="持有份额" align="right" min-width="140">
+          <template #default="{ row }">
+            <div class="metric-stack">
+              <span class="metric-main">{{ formatNumber(row.myShares) }}</span>
+              <span class="target-hint">博主：{{ formatNumber(row.bloggerShares) }}</span>
             </div>
           </template>
         </vxe-column>
@@ -206,11 +223,11 @@ function tradeLabel(type: TradeType): string {
           <template #default="{ row }">
             <div class="metric-stack">
               <span class="metric-main profit-value" :class="profitColorClass(row.myTodayProfit)">
-                {{ formatOptionalMoney(formatMoney, row.myTodayProfit) }}
+                {{ formatNullable(props.formatMoney, row.myTodayProfit) }}
               </span>
               <span class="target-hint">
                 博主：<span class="profit-value" :class="profitColorClass(row.bloggerTodayProfit)">
-                  {{ formatOptionalMoney(formatMoney, row.bloggerTodayProfit) }}
+                  {{ formatNullable(props.formatMoney, row.bloggerTodayProfit) }}
                 </span>
               </span>
             </div>
