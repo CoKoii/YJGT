@@ -10,8 +10,7 @@ const props = defineProps<{
   side: InvestorSide
   fileList: UploadFile[]
   rows: RecognizedHolding[]
-  recognizing: boolean
-  preparing: boolean
+  busy: boolean
 }>()
 
 defineEmits<{
@@ -31,6 +30,7 @@ const summary = computed(() =>
     { amount: 0, profit: 0 },
   ),
 )
+
 </script>
 
 <template>
@@ -41,6 +41,11 @@ const summary = computed(() =>
     width="980px"
     ok-text="写入快照事件"
     cancel-text="关闭"
+    :closable="!props.busy"
+    :mask-closable="!props.busy"
+    :keyboard="!props.busy"
+    :cancel-button-props="{ disabled: props.busy }"
+    :ok-button-props="{ disabled: props.busy }"
     @update:open="$emit('update:open', $event)"
     @ok="$emit('apply')"
   >
@@ -71,8 +76,7 @@ const summary = computed(() =>
           <a-button
             type="primary"
             block
-            :loading="recognizing || preparing"
-            :disabled="preparing"
+            :loading="props.busy"
             @click="$emit('recognize')"
           >
             <RobotOutlined />

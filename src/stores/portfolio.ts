@@ -151,13 +151,14 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       historyTaskId = null
       historyTaskType = null
     }
-    if ('requestIdleCallback' in window) {
+    const requestIdleCallback = (
+      window as Window & {
+        requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+      }
+    ).requestIdleCallback
+    if (requestIdleCallback) {
       historyTaskType = 'idle'
-      historyTaskId = (
-        window as Window & {
-          requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-        }
-      ).requestIdleCallback?.(() => run(), { timeout: 250 }) ?? null
+      historyTaskId = requestIdleCallback(() => run(), { timeout: 250 })
       return
     }
     historyTaskType = 'timeout'
@@ -288,6 +289,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     events: sortedEvents,
     allEvents,
     navHistory,
+    sourceState,
     updatedAt,
     hydrated,
     holdings,

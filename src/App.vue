@@ -36,8 +36,7 @@ import {
   formatPlainPercent,
   roundMoney,
 } from '@/utils/number'
-import { downloadText } from '@/utils/file'
-import { readImageDataUrl } from '@/utils/file'
+import { downloadText, readImageDataUrl } from '@/utils/file'
 
 const store = usePortfolioStore()
 const AiChatPanel = defineAsyncComponent(() => import('@/components/AiChatPanel.vue'))
@@ -63,6 +62,7 @@ const aiImageDataUrls = ref<Record<string, string>>({})
 const recognizedRows = ref<RecognizedHolding[]>([])
 const selectedOperationEvents = ref<Trade[]>([])
 const chatMessages = ref<AiChatMessage[]>(loadAiChatMessages())
+const isAiRecognitionBusy = computed(() => recognizing.value || preparingUploads.value)
 
 const emptyValues = (): SideValues => ({ mine: 0, blogger: 0 })
 
@@ -201,6 +201,14 @@ function saveSettings(): void {
   message.success('设置已保存')
 }
 
+function updateAiRecognitionOpen(open: boolean): void {
+  if (!open && isAiRecognitionBusy.value) {
+    message.warning('截图正在处理中，请稍等')
+    return
+  }
+  isAiRecognitionOpen.value = open
+}
+
 function openTradeModal(payload: { row: HoldingRow; type: TradeType }): void {
   resetTradeForm(payload.row, payload.type)
   isTradeOpen.value = true
@@ -314,13 +322,6 @@ async function syncNavForFunds(fundCodes: string[], silent = true): Promise<void
   }
 }
 
-function syncCurrentHoldingNavs(): Promise<void> {
-  return syncNavForFunds(
-    store.holdings.map((holding) => holding.fundCode),
-    true,
-  )
-}
-
 function syncNavSilently(fundCodes: string[], fallbackMessage: string): void {
   void syncNavForFunds(fundCodes, true).catch((error) => {
     message.warning(error instanceof Error ? error.message : fallbackMessage)
@@ -360,8 +361,8 @@ function hasAnyValue(values: SideValues): boolean {
 }
 
 function validateKnownShares(row: HoldingRow, shares: SideValues): boolean {
-  const myKnownShares = getKnownSidePosition(store.$state, row.fundCode, 'mine').shares
-  const bloggerKnownShares = getKnownSidePosition(store.$state, row.fundCode, 'blogger').shares
+  const myKnownShares = getKnownSidePosition(store.sourceState, row.fundCode, 'mine').shares
+  const bloggerKnownShares = getKnownSidePosition(store.sourceState, row.fundCode, 'blogger').shares
   if (shares.mine > myKnownShares + 0.0001 || shares.blogger > bloggerKnownShares + 0.0001) {
     message.warning('卖出或转出份额不能超过当前已确认份额')
     return false
@@ -455,13 +456,23 @@ async function handleAiUploadChange(payload: UploadChangeParam): Promise<void> {
   )
   preparingUploads.value = true
   try {
-    await Promise.all(
+    const results = await Promise.allSettled(
       payload.fileList.map(async (file) => {
-        if (!file.originFileObj || nextUrls[file.uid]) return
-        nextUrls[file.uid] = await readImageDataUrl(file.originFileObj)
+        if (!file.originFileObj || nextUrls[file.uid]) return null
+        return [file.uid, await readImageDataUrl(file.originFileObj)] as const
       }),
     )
+    results.forEach((result) => {
+      if (result.status !== 'fulfilled' || !result.value) return
+      const [uid, url] = result.value
+      nextUrls[uid] = url
+    })
     aiImageDataUrls.value = nextUrls
+    const failed = results.find((result) => result.status === 'rejected')
+    if (failed) {
+      aiFiles.value = payload.fileList.filter((file) => nextUrls[file.uid])
+      message.error(failed.reason instanceof Error ? failed.reason.message : '图片读取失败')
+    }
   } finally {
     preparingUploads.value = false
   }
@@ -478,6 +489,7 @@ async function completeRecognizedCodes(rows: RecognizedHolding[]): Promise<Recog
 }
 
 async function runAiRecognition(): Promise<void> {
+  if (isAiRecognitionBusy.value) return
   const images = aiFiles.value
     .map((file) => aiImageDataUrls.value[file.uid])
     .filter((url): url is string => Boolean(url))
@@ -768,9 +780,8 @@ watch(
         :side="aiSide"
         :file-list="aiFiles"
         :rows="recognizedRows"
-        :recognizing="recognizing"
-        :preparing="preparingUploads"
-        @update:open="isAiRecognitionOpen = $event"
+        :busy="isAiRecognitionBusy"
+        @update:open="updateAiRecognitionOpen"
         @update:side="aiSide = $event"
         @upload-change="handleAiUploadChange"
         @recognize="runAiRecognition"
