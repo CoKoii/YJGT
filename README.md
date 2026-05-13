@@ -1,6 +1,6 @@
-# YJGT-new
+# 跟投助手
 
-`YJGT-new` 是对旧版跟投助手的重新设计。新系统保留跟投管理的工作台外观，但把业务核心改成源事件账本，避免把当前持仓、收益率、历史曲线这类派生数据重复落盘。
+`跟投助手` 保留跟投管理的工作台外观，但把业务核心改成源事件账本，避免把当前持仓、收益率、历史曲线这类派生数据重复落盘。
 
 ## 设计原则
 
@@ -36,8 +36,8 @@ src/
 ## 开发
 
 ```sh
-pnpm --dir YJGT-new install
-pnpm --dir YJGT-new dev
-pnpm --dir YJGT-new type-check
-pnpm --dir YJGT-new build
+pnpm --dir YJGT install
+pnpm --dir YJGT dev
+pnpm --dir YJGT type-check
+pnpm --dir YJGT build
 ```

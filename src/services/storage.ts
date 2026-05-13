@@ -2,7 +2,7 @@ import { STORAGE_KEY } from '@/constants/portfolio'
 import { createEmptyPortfolioState, normalizePortfolioState } from '@/domain/portfolio'
 import type { AiChatMessage, PortfolioState } from '@/types/portfolio'
 
-const AI_CHAT_STORAGE_KEY = 'yjgt-new:ai-chat'
+const AI_CHAT_STORAGE_KEY = 'yjgt:ai-chat'
 
 export function loadPortfolio(): PortfolioState {
   const raw = localStorage.getItem(STORAGE_KEY)

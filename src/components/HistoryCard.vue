@@ -1,23 +1,55 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { PortfolioHistoryPoint } from '@/types/portfolio'
+import { parseLocalDate } from '@/utils/date'
 
 const props = defineProps<{
   history: PortfolioHistoryPoint[]
 }>()
 
+type RangeKey = '1m' | '1y'
+
 const chartRef = ref<HTMLDivElement | null>(null)
+const range = ref<RangeKey>('1m')
 let chart: echarts.ECharts | null = null
 
 function color(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
+function hasBookValue(point: PortfolioHistoryPoint): boolean {
+  return (
+    Math.abs(point.myAmount) > 0.01 ||
+    Math.abs(point.bloggerAmount) > 0.01 ||
+    Math.abs(point.myProfit) > 0.01 ||
+    Math.abs(point.bloggerProfit) > 0.01
+  )
+}
+
+function rangeStartDate(points: PortfolioHistoryPoint[], rangeKey: RangeKey): Date | null {
+  const latest = points.at(-1)
+  if (!latest) return null
+  const start = parseLocalDate(latest.date)
+  if (rangeKey === '1m') {
+    start.setMonth(start.getMonth() - 1)
+  } else {
+    start.setFullYear(start.getFullYear() - 1)
+  }
+  return start
+}
+
+const chartHistory = computed(() => {
+  const points = props.history.filter(hasBookValue)
+  const start = rangeStartDate(points, range.value)
+  if (!start) return []
+  return points.filter((point) => parseLocalDate(point.date) >= start)
+})
+
 function renderChart(): void {
   if (!chartRef.value) return
   chart ??= echarts.init(chartRef.value)
-  const history = props.history
+  const history = chartHistory.value
   chart.setOption(
     {
       title:
@@ -70,7 +102,7 @@ function renderChart(): void {
 }
 
 watch(
-  () => props.history,
+  () => [chartHistory.value, range.value],
   async () => {
     await nextTick()
     renderChart()
@@ -85,6 +117,16 @@ onBeforeUnmount(() => {
 
 <template>
   <a-card title="账本收益曲线" size="small" class="trend-card">
+    <template #extra>
+      <a-segmented
+        v-model:value="range"
+        size="small"
+        :options="[
+          { label: '近一月', value: '1m' },
+          { label: '近一年', value: '1y' },
+        ]"
+      />
+    </template>
     <div ref="chartRef" class="chart"></div>
   </a-card>
 </template>

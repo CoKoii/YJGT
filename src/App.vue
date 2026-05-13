@@ -593,7 +593,7 @@ async function sendChatMessage(question: string): Promise<void> {
 }
 
 function exportJson(): void {
-  downloadText(`yjgt-new-source-${Date.now()}.json`, store.exportJson(), 'application/json;charset=utf-8')
+  downloadText(`yjgt-source-${Date.now()}.json`, store.exportJson(), 'application/json;charset=utf-8')
 }
 
 function exportCsv(): void {
@@ -625,7 +625,7 @@ function exportCsv(): void {
       holding.bloggerProfit,
     ].map(csvEscape),
   )
-  downloadText(`yjgt-new-holdings-${Date.now()}.csv`, [header, ...rows].map((row) => row.join(',')).join('\n'), 'text/csv;charset=utf-8')
+  downloadText(`yjgt-holdings-${Date.now()}.csv`, [header, ...rows].map((row) => row.join(',')).join('\n'), 'text/csv;charset=utf-8')
 }
 
 function exportData(key: 'json' | 'csv'): void {
@@ -689,7 +689,7 @@ watch(
           <a-col>
             <a-space align="center" :size="12">
               <span class="brand-icon"><BarChartOutlined /></span>
-              <span class="brand-title">跟投助手 New</span>
+              <span class="brand-title">跟投助手</span>
             </a-space>
           </a-col>
           <a-col>
