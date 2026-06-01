@@ -332,9 +332,35 @@ function isRealFundCode(code: string): boolean {
   return FUND_CODE_PATTERN.test(String(code ?? '').trim())
 }
 
-function createScreenshotFundCode(row: RecognizedHolding, index: number): string {
-  const key = `${String(row.fundName ?? '').trim() || 'unknown'}:${index + 1}`
+function normalizeFundNameForMatch(name: string): string {
+  return String(name ?? '').replace(/[()\s（）]/g, '').toUpperCase()
+}
+
+function createScreenshotFundCode(fundName: string): string {
+  const key = normalizeFundNameForMatch(fundName) || 'UNKNOWN'
   return `${SCREENSHOT_FUND_CODE_PREFIX}${encodeURIComponent(key)}`
+}
+
+function findExistingFundCodeByName(fundName: string): string {
+  const normalizedName = normalizeFundNameForMatch(fundName)
+  if (!normalizedName) return ''
+
+  const matchedHolding = store.holdings.find(
+    (holding) => normalizeFundNameForMatch(holding.fundName) === normalizedName,
+  )
+  if (matchedHolding) return matchedHolding.fundCode
+
+  const matchedFund = store.funds.find(
+    (fund) => normalizeFundNameForMatch(fund.name) === normalizedName,
+  )
+  return matchedFund?.code ?? ''
+}
+
+function resolveRecognizedFundCode(row: RecognizedHolding): string {
+  if (isRealFundCode(row.fundCode)) return row.fundCode.trim()
+
+  const fundName = String(row.fundName ?? '').trim()
+  return findExistingFundCodeByName(fundName) || createScreenshotFundCode(fundName)
 }
 
 async function saveSnapshot(): Promise<void> {
@@ -533,13 +559,16 @@ async function applyRecognizedSnapshots(): Promise<void> {
     return
   }
 
-  validRows.forEach((row, index) => {
-    const fundCode = isRealFundCode(row.fundCode)
-      ? row.fundCode.trim()
-      : createScreenshotFundCode(row, index)
+  const snapshotRows = validRows.map((row) => ({
+    ...row,
+    fundCode: resolveRecognizedFundCode(row),
+    fundName: String(row.fundName ?? '').trim(),
+  }))
+
+  snapshotRows.forEach((row) => {
     store.addSnapshot({
-      fundCode,
-      fundName: String(row.fundName ?? '').trim(),
+      fundCode: row.fundCode,
+      fundName: row.fundName,
       side: aiSide.value,
       tradeDate: snapshotDate,
       amount: roundMoney(row.amount),
@@ -555,7 +584,7 @@ async function applyRecognizedSnapshots(): Promise<void> {
   message.success(`已写入 ${validRows.length} 条真实快照事件`)
 
   syncNavSilently(
-    validRows.map((row) => row.fundCode).filter(isRealFundCode),
+    snapshotRows.map((row) => row.fundCode).filter(isRealFundCode),
     '快照已写入，净值同步失败',
   )
 }
