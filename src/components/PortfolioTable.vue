@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { HoldingRow, Trade, TradeType } from '@/types/portfolio'
+import { SCREENSHOT_FUND_CODE_PREFIX } from '@/constants/portfolio'
 import { profitColorClass } from '@/utils/number'
 import {
   DeleteOutlined,
@@ -81,6 +82,10 @@ function tradeLabel(type: TradeType): string {
   if (type === 'sell') return '卖'
   return '转'
 }
+
+function displayFundCode(code: string): string {
+  return code.startsWith(SCREENSHOT_FUND_CODE_PREFIX) ? '未识别代码' : code
+}
 </script>
 
 <template>
@@ -149,7 +154,7 @@ function tradeLabel(type: TradeType): string {
             <div class="fund-cell">
               <button class="link-button" @click.stop="$emit('detail', row)">
                 <span class="fund-name-text">{{ row.fundName || '未命名基金' }}</span>
-                <span>{{ row.fundCode }}</span>
+                <span>{{ displayFundCode(row.fundCode) }}</span>
               </button>
               <button
                 v-if="row.pendingEvents.length > 0"

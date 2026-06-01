@@ -12,7 +12,7 @@ import PortfolioTable from '@/components/PortfolioTable.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import SnapshotModal, { type SnapshotForm } from '@/components/SnapshotModal.vue'
 import TradeModal, { type TradeForm } from '@/components/TradeModal.vue'
-import { FUND_CODE_PATTERN } from '@/constants/portfolio'
+import { FUND_CODE_PATTERN, SCREENSHOT_FUND_CODE_PREFIX } from '@/constants/portfolio'
 import { fetchFundInfo, fetchFundNetWorthTrend, searchFundByName } from '@/services/fund'
 import { loadAiChatMessages, saveAiChatMessages } from '@/services/storage'
 import { usePortfolioStore } from '@/stores/portfolio'
@@ -328,6 +328,15 @@ function syncNavSilently(fundCodes: string[], fallbackMessage: string): void {
   })
 }
 
+function isRealFundCode(code: string): boolean {
+  return FUND_CODE_PATTERN.test(String(code ?? '').trim())
+}
+
+function createScreenshotFundCode(row: RecognizedHolding, index: number): string {
+  const key = `${String(row.fundName ?? '').trim() || 'unknown'}:${index + 1}`
+  return `${SCREENSHOT_FUND_CODE_PREFIX}${encodeURIComponent(key)}`
+}
+
 async function saveSnapshot(): Promise<void> {
   if (!validateFund(snapshotForm.fundCode, snapshotForm.fundName)) {
     return
@@ -481,8 +490,8 @@ async function handleAiUploadChange(payload: UploadChangeParam): Promise<void> {
 async function completeRecognizedCodes(rows: RecognizedHolding[]): Promise<RecognizedHolding[]> {
   return Promise.all(
     rows.map(async (row) => {
-      if (FUND_CODE_PATTERN.test(row.fundCode.trim())) return row
-      const fund = await searchFundByName(row.fundName)
+      if (isRealFundCode(row.fundCode)) return row
+      const fund = await searchFundByName(String(row.fundName ?? ''))
       return fund ? { ...row, fundCode: fund.code, fundName: row.fundName || fund.name } : row
     }),
   )
@@ -504,7 +513,7 @@ async function runAiRecognition(): Promise<void> {
       await recognizeHoldingImages(store.settings, images),
     )
     const missingCodeCount = recognizedRows.value.filter(
-      (row) => !FUND_CODE_PATTERN.test(row.fundCode.trim()),
+      (row) => !isRealFundCode(row.fundCode),
     ).length
     message.success(
       `已识别 ${recognizedRows.value.length} 条持仓${missingCodeCount ? `，其中 ${missingCodeCount} 条暂未匹配代码` : ''}`,
@@ -518,18 +527,19 @@ async function runAiRecognition(): Promise<void> {
 
 async function applyRecognizedSnapshots(): Promise<void> {
   const snapshotDate = formatDateKey()
-  const validRows = recognizedRows.value.filter(
-    (row) => FUND_CODE_PATTERN.test(row.fundCode.trim()) && row.fundName.trim(),
-  )
+  const validRows = recognizedRows.value.filter((row) => String(row.fundName ?? '').trim())
   if (validRows.length === 0) {
     message.warning('没有可写入的有效识别结果')
     return
   }
 
-  validRows.forEach((row) => {
+  validRows.forEach((row, index) => {
+    const fundCode = isRealFundCode(row.fundCode)
+      ? row.fundCode.trim()
+      : createScreenshotFundCode(row, index)
     store.addSnapshot({
-      fundCode: row.fundCode.trim(),
-      fundName: row.fundName.trim(),
+      fundCode,
+      fundName: String(row.fundName ?? '').trim(),
       side: aiSide.value,
       tradeDate: snapshotDate,
       amount: roundMoney(row.amount),
@@ -545,7 +555,7 @@ async function applyRecognizedSnapshots(): Promise<void> {
   message.success(`已写入 ${validRows.length} 条真实快照事件`)
 
   syncNavSilently(
-    validRows.map((row) => row.fundCode),
+    validRows.map((row) => row.fundCode).filter(isRealFundCode),
     '快照已写入，净值同步失败',
   )
 }
